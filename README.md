@@ -159,23 +159,43 @@ docker compose down
 
 ## Telegram Commands
 
+The bot shows role-based Telegram buttons. Slash commands remain available as
+a fallback, but the normal flow is button-driven.
+
 Admin commands:
 
-- `/key_create <name>`: create a one-time invite key for a friend.
-- `/keys`: list invite labels, binding status, and revoked state.
-- `/key_revoke <key>`: revoke an unused or already-bound key.
-- `/user_revoke <tg_id>`: revoke access for an activated user.
-- `/users`: list activated users.
+- `Create invite`: create a one-time invite key for a friend.
+- `Invite keys`: list invite labels, binding status, and revoked state.
+- `Revoke key`: revoke an unused or already-bound key.
+- `Revoke user`: revoke access for an activated user.
+- `Users`: list activated users.
 
 User commands:
 
-- `/redeem <key>`: activate access with a one-time invite key.
-- `/status`: check access and VPN config status.
-- `/create`: create a VPN config for the current Telegram user.
-- `/start` and `/help`: show available commands.
+- `Activate access`: enter and bind a one-time invite key.
+- `Status`: check access and VPN config status.
+- `Create config`: create a VPN config for the current Telegram user.
+- `Help`: show available actions.
+
+Slash command equivalents:
+
+```text
+/key_create <name>
+/keys
+/key_revoke <key>
+/user_revoke <tg_id>
+/users
+/redeem <key>
+/status
+/create
+```
 
 Invite keys bind to the first Telegram ID that redeems them. A revoked key
 removes access for the bound user.
+
+Admins receive Telegram notifications for access-key redemption attempts,
+config creation attempts, status checks, invite creation, invite revocation,
+user revocation, and admin list actions.
 
 Clients are named as:
 
@@ -248,6 +268,7 @@ socket access.
 - Keep runtime secrets in environment variables.
 - Restrict admin access with `TELEGRAM_ADMIN_IDS`.
 - Invite keys are one-time keys and are stored as SHA-256 hashes, not plaintext.
+- Admin notifications are sent to every ID in `TELEGRAM_ADMIN_IDS`.
 - The bot container mounts `/var/run/docker.sock`. Treat this as privileged
   access to the Docker host.
 - Run the bot only on a trusted server.

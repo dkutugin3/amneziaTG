@@ -47,19 +47,25 @@ Replace `amnezia-awg` with the real Amnezia container name.
 
 ## Telegram Commands
 
+The bot shows role-based Telegram buttons. Slash commands are still supported
+as a fallback.
+
 Admin commands:
 
-- `/key_create <name>` creates a one-time invite key.
-- `/keys` lists invite keys by label and binding status.
-- `/key_revoke <key>` revokes an invite key and its bound access.
-- `/user_revoke <tg_id>` revokes access for an activated user.
-- `/users` lists activated users.
+- `Create invite` creates a one-time invite key.
+- `Invite keys` lists invite keys by label and binding status.
+- `Revoke key` revokes an invite key and its bound access.
+- `Revoke user` revokes access for an activated user.
+- `Users` lists activated users.
 
 User commands:
 
-- `/redeem <key>` binds the key to the current Telegram ID.
-- `/status` checks access and config status.
-- `/create` creates a VPN config for the current Telegram user.
-- `/start` and `/help` show available commands.
+- `Activate access` binds an invite key to the current Telegram ID.
+- `Status` checks access and config status.
+- `Create config` creates a VPN config for the current Telegram user.
+- `Help` shows available actions.
+
+Admins receive Telegram notifications when users redeem keys, check status,
+create configs, or when admins create/revoke/list access.
 
 Clients are named as `tg_<telegram_user_id>`.
