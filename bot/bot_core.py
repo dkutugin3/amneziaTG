@@ -4,6 +4,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Mapping, Optional, Set
 
+try:
+    from bot.access_store import AccessStore, DEFAULT_DB_PATH
+except ImportError:
+    from access_store import AccessStore, DEFAULT_DB_PATH
+
 
 DEFAULT_CLIENTS_DIR = Path("/opt/amnezia/awg/clients")
 DEFAULT_CREATE_CLIENT_SCRIPT = Path("/opt/amnezia/awg/bot/create_client.py")
@@ -26,6 +31,7 @@ class BotConfig:
     provision_mode: str = LOCAL_MODE
     amnezia_container_name: Optional[str] = None
     docker_binary: str = DEFAULT_DOCKER_BINARY
+    db_path: Path = DEFAULT_DB_PATH
 
 
 @dataclass(frozen=True)
@@ -88,6 +94,7 @@ def load_config_from_mapping(values: Mapping[str, str]) -> BotConfig:
         values.get("AMNEZIA_CREATE_CLIENT_SCRIPT", str(DEFAULT_CREATE_CLIENT_SCRIPT))
     )
     docker_binary = values.get("DOCKER_BINARY", DEFAULT_DOCKER_BINARY).strip()
+    db_path = Path(values.get("AMNEZIA_TG_DB_PATH", str(DEFAULT_DB_PATH)))
 
     return BotConfig(
         token=token,
@@ -98,6 +105,7 @@ def load_config_from_mapping(values: Mapping[str, str]) -> BotConfig:
         provision_mode=provision_mode,
         amnezia_container_name=amnezia_container_name,
         docker_binary=docker_binary,
+        db_path=db_path,
     )
 
 
@@ -106,11 +114,26 @@ def default_runner(command: list[str]) -> subprocess.CompletedProcess:
 
 
 class Provisioner:
-    def __init__(self, config: BotConfig, runner: Runner = default_runner):
+    def __init__(
+        self,
+        config: BotConfig,
+        runner: Runner = default_runner,
+        access_store: Optional[AccessStore] = None,
+    ):
         self.config = config
         self.runner = runner
+        self.access_store = access_store
 
     def is_allowed(self, user_id: int) -> bool:
+        if user_id in self.config.admin_ids:
+            return True
+
+        if self.access_store is None:
+            return False
+
+        return self.access_store.is_user_active(user_id)
+
+    def is_admin(self, user_id: int) -> bool:
         return user_id in self.config.admin_ids
 
     def client_exists(self, user_id: int) -> bool:
@@ -148,6 +171,9 @@ class Provisioner:
         vpn_uri = result.stdout.strip()
         if not vpn_uri.startswith("vpn://"):
             raise CreateClientError("create client command did not return a vpn:// URI")
+
+        if self.access_store is not None:
+            self.access_store.record_client(user_id, client_name)
 
         return CreateClientResult(
             client_name=client_name,

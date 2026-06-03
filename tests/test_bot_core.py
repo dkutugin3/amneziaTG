@@ -11,6 +11,7 @@ from bot.bot_core import (
     load_config_from_mapping,
     parse_admin_ids,
 )
+from bot.access_store import AccessStore
 
 
 class BotCoreTest(unittest.TestCase):
@@ -65,6 +66,42 @@ class BotCoreTest(unittest.TestCase):
         self.assertFalse(result.already_exists)
         self.assertEqual(result.vpn_uri, "vpn://abc")
         self.assertEqual(calls, [["python3", str(script_path), "tg_42", "vpn.example.com"]])
+
+    def test_allowed_user_can_come_from_redeemed_invite(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = AccessStore(Path(tmp) / "db.sqlite", key_generator=lambda: "AMZ-TEST-KEY")
+            invite = store.create_invite("alice", created_by_tg_id=1)
+            store.redeem_invite(invite.key, tg_id=42)
+            config = BotConfig(
+                token="token",
+                admin_ids={1},
+                public_endpoint="vpn.example.com",
+            )
+
+            provisioner = Provisioner(config, access_store=store)
+
+            self.assertTrue(provisioner.is_allowed(1))
+            self.assertTrue(provisioner.is_allowed(42))
+            self.assertFalse(provisioner.is_allowed(43))
+
+    def test_create_records_client_after_successful_generation(self):
+        def runner(command):
+            return subprocess.CompletedProcess(command, 0, "vpn://abc\n", "")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            store = AccessStore(Path(tmp) / "db.sqlite")
+            config = BotConfig(
+                token="token",
+                admin_ids={42},
+                public_endpoint="vpn.example.com",
+                clients_dir=Path(tmp) / "clients",
+                create_client_script=Path(tmp) / "create_client.py",
+            )
+
+            result = Provisioner(config, runner=runner, access_store=store).create_client(42)
+
+            self.assertEqual(result.vpn_uri, "vpn://abc")
+            self.assertEqual(store.get_client(42).client_name, "tg_42")
 
     def test_docker_exec_mode_checks_client_inside_amnezia_container(self):
         calls = []

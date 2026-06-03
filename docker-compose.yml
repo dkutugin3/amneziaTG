@@ -12,5 +12,10 @@ services:
       AMNEZIA_PROVISION_MODE: docker-exec
       AMNEZIA_CREATE_CLIENT_SCRIPT: /opt/amnezia/awg/bot/create_client.py
       AMNEZIA_CLIENTS_DIR: /opt/amnezia/awg/clients
+      AMNEZIA_TG_DB_PATH: /data/amnezia_tg.db
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - amnezia-tg-data:/data
+
+volumes:
+  amnezia-tg-data:
