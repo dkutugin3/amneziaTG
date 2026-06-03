@@ -8,6 +8,7 @@ from bot.bot_core import (
     CreateClientError,
     Provisioner,
     client_name_for_user,
+    load_config_from_mapping,
     parse_admin_ids,
 )
 
@@ -64,6 +65,81 @@ class BotCoreTest(unittest.TestCase):
         self.assertFalse(result.already_exists)
         self.assertEqual(result.vpn_uri, "vpn://abc")
         self.assertEqual(calls, [["python3", str(script_path), "tg_42", "vpn.example.com"]])
+
+    def test_docker_exec_mode_checks_client_inside_amnezia_container(self):
+        calls = []
+
+        def runner(command):
+            calls.append(command)
+            return subprocess.CompletedProcess(command, 0, "", "")
+
+        config = BotConfig(
+            token="token",
+            admin_ids={42},
+            public_endpoint="vpn.example.com",
+            provision_mode="docker-exec",
+            amnezia_container_name="amnezia",
+        )
+
+        self.assertTrue(Provisioner(config, runner=runner).client_exists(42))
+        self.assertEqual(
+            calls,
+            [
+                [
+                    "docker",
+                    "exec",
+                    "amnezia",
+                    "test",
+                    "-f",
+                    "/opt/amnezia/awg/clients/tg_42.conf",
+                ]
+            ],
+        )
+
+    def test_docker_exec_mode_runs_create_script_inside_amnezia_container(self):
+        calls = []
+
+        def runner(command):
+            calls.append(command)
+            if command[3:5] == ["test", "-f"]:
+                return subprocess.CompletedProcess(command, 1, "", "")
+            return subprocess.CompletedProcess(command, 0, "vpn://abc\n", "")
+
+        config = BotConfig(
+            token="token",
+            admin_ids={42},
+            public_endpoint="vpn.example.com",
+            provision_mode="docker-exec",
+            amnezia_container_name="amnezia",
+        )
+
+        result = Provisioner(config, runner=runner).create_client(42)
+
+        self.assertEqual(result.vpn_uri, "vpn://abc")
+        self.assertEqual(
+            calls[-1],
+            [
+                "docker",
+                "exec",
+                "amnezia",
+                "python3",
+                "/opt/amnezia/awg/bot/create_client.py",
+                "tg_42",
+                "vpn.example.com",
+            ],
+        )
+
+    def test_load_config_from_mapping_supports_docker_exec_mode(self):
+        config = load_config_from_mapping({
+            "TELEGRAM_BOT_TOKEN": "token",
+            "TELEGRAM_ADMIN_IDS": "42",
+            "AMNEZIA_PUBLIC_ENDPOINT": "vpn.example.com",
+            "AMNEZIA_PROVISION_MODE": "docker-exec",
+            "AMNEZIA_CONTAINER_NAME": "amnezia-awg",
+        })
+
+        self.assertEqual(config.provision_mode, "docker-exec")
+        self.assertEqual(config.amnezia_container_name, "amnezia-awg")
 
     def test_create_raises_safe_error_when_script_fails(self):
         def runner(command):

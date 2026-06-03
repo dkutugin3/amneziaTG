@@ -1,0 +1,16 @@
+services:
+  amnezia-tg-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: amnezia-tg-bot:0.1.0
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      AMNEZIA_PROVISION_MODE: docker-exec
+      AMNEZIA_CREATE_CLIENT_SCRIPT: /opt/amnezia/awg/bot/create_client.py
+      AMNEZIA_CLIENTS_DIR: /opt/amnezia/awg/clients
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock

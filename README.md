@@ -1,11 +1,12 @@
 # Amnezia Telegram Bot
 
-Telegram bot MVP for issuing AmneziaWG client configs from inside an existing
-Amnezia container.
+Telegram bot MVP for issuing AmneziaWG client configs from a separate Docker
+container.
 
-The bot is intentionally small: it runs in the same environment as AmneziaWG,
-calls the local provisioning script, and sends the generated `vpn://` URI back
-to an allowed Telegram user.
+The bot container uses Docker CLI access to execute the provisioning script
+inside the existing Amnezia container. The low-level AmneziaWG changes still
+happen inside the Amnezia environment where `awg`, `awg0`, `awg0.conf`, and
+`clientsTable` are available.
 
 ## Current Architecture
 
@@ -13,16 +14,24 @@ to an allowed Telegram user.
 Telegram user
     |
     v
-telegram_bot.py
+amnezia-tg-bot container
     |
+    | docker exec <amnezia-container> python3 create_client.py ...
     v
-create_client.py
+Amnezia container
     |
     v
 AmneziaWG: awg0, awg0.conf, clientsTable, clients/
 ```
 
-The bot must run where these AmneziaWG resources are available:
+The bot container does not need direct access to AmneziaWG files. It needs:
+
+- Docker CLI
+- mounted Docker socket: `/var/run/docker.sock`
+- name of the Amnezia container
+
+The provisioning script must exist inside the Amnezia container where these
+resources are available:
 
 - `awg` binary
 - active `awg0` interface
@@ -43,13 +52,17 @@ bot/
 
 tests/
   test_bot_core.py   # Unit tests for bot_core.py
+
+Dockerfile           # Bot container image
+docker-compose.yml   # Bot service definition
+.env.example         # Runtime configuration template
 ```
 
 ## Requirements
 
-- Python 3.9+
-- Running AmneziaWG container/environment
-- `awg` available in `PATH`
+- Docker and Docker Compose
+- Running AmneziaWG container
+- `awg` available in `PATH` inside the Amnezia container
 - Telegram bot token from BotFather
 - Telegram user IDs allowed to use the bot
 
@@ -67,6 +80,7 @@ Set these environment variables before starting the bot:
 export TELEGRAM_BOT_TOKEN="123456:telegram-token"
 export TELEGRAM_ADMIN_IDS="123456789,987654321"
 export AMNEZIA_PUBLIC_ENDPOINT="vpn.example.com"
+export AMNEZIA_CONTAINER_NAME="amnezia-awg"
 ```
 
 Variables:
@@ -74,33 +88,68 @@ Variables:
 - `TELEGRAM_BOT_TOKEN`: token received from BotFather.
 - `TELEGRAM_ADMIN_IDS`: comma-separated or space-separated Telegram user IDs.
 - `AMNEZIA_PUBLIC_ENDPOINT`: public IP address or DNS name clients should use.
+- `AMNEZIA_CONTAINER_NAME`: Docker container name of the running Amnezia
+  container.
 
 Optional overrides:
 
 ```sh
 export AMNEZIA_CLIENTS_DIR="/opt/amnezia/awg/clients"
 export AMNEZIA_CREATE_CLIENT_SCRIPT="/opt/amnezia/awg/bot/create_client.py"
+export DOCKER_BINARY="docker"
 ```
 
-## Install Inside the Amnezia Container
+## Prepare the Amnezia Container
 
-Copy the `bot/` directory into the Amnezia container. The default path expected
-by the code is:
+The bot runs separately, but `create_client.py` must be available inside the
+Amnezia container. The default path expected by `docker-compose.yml` is:
 
 ```text
-/opt/amnezia/awg/bot/
+/opt/amnezia/awg/bot/create_client.py
 ```
 
-Install dependencies:
+Copy the provisioning script into the Amnezia container:
 
 ```sh
-python3 -m pip install -r /opt/amnezia/awg/bot/requirements.txt
+docker exec amnezia-awg mkdir -p /opt/amnezia/awg/bot
+docker cp bot/create_client.py amnezia-awg:/opt/amnezia/awg/bot/create_client.py
+```
+
+Replace `amnezia-awg` with your actual Amnezia container name.
+
+## Run the Bot Container
+
+Create `.env` from the template:
+
+```sh
+cp .env.example .env
+```
+
+Edit `.env` and set real values:
+
+```sh
+TELEGRAM_BOT_TOKEN=123456:real-token
+TELEGRAM_ADMIN_IDS=123456789
+AMNEZIA_PUBLIC_ENDPOINT=vpn.example.com
+AMNEZIA_CONTAINER_NAME=amnezia-awg
 ```
 
 Start the bot:
 
 ```sh
-python3 /opt/amnezia/awg/bot/telegram_bot.py
+docker compose up -d --build
+```
+
+View logs:
+
+```sh
+docker compose logs -f amnezia-tg-bot
+```
+
+Stop the bot:
+
+```sh
+docker compose down
 ```
 
 ## Telegram Commands
@@ -124,7 +173,16 @@ tg_123456789
 
 ## Provisioning Behavior
 
-`create_client.py` performs the low-level AmneziaWG changes:
+`telegram_bot.py` runs in the bot container. In `docker-exec` mode it calls:
+
+```sh
+docker exec <AMNEZIA_CONTAINER_NAME> \
+  python3 /opt/amnezia/awg/bot/create_client.py \
+  tg_<telegram_user_id> <AMNEZIA_PUBLIC_ENDPOINT>
+```
+
+`create_client.py` runs inside the Amnezia container and performs the low-level
+AmneziaWG changes:
 
 - reads `/opt/amnezia/awg/awg0.conf`
 - allocates a free client IP address
@@ -135,7 +193,7 @@ tg_123456789
 - updates `/opt/amnezia/awg/clientsTable`
 - prints a `vpn://` URI to stdout
 
-`telegram_bot.py` treats stdout from `create_client.py` as the VPN link.
+The bot treats stdout from `create_client.py` as the VPN link.
 
 If a config file already exists for the Telegram user, the bot does not
 recreate it. It replies that the config already exists.
@@ -151,7 +209,7 @@ python3 -m unittest tests/test_bot_core.py
 Compile-check Python files:
 
 ```sh
-PYTHONPYCACHEPREFIX=/private/tmp/amnezia_tg_pycache \
+PYTHONPYCACHEPREFIX=/tmp/pycache \
   python3 -m py_compile \
   bot/bot_core.py \
   bot/create_client.py \
@@ -160,15 +218,17 @@ PYTHONPYCACHEPREFIX=/private/tmp/amnezia_tg_pycache \
   tests/test_bot_core.py
 ```
 
-The full provisioning flow cannot be tested on a local machine unless `awg`,
-`awg0`, and the Amnezia config files are available.
+The full provisioning flow requires a running Amnezia container and Docker
+socket access.
 
 ## Security Notes
 
 - Do not commit real Telegram bot tokens.
 - Keep runtime secrets in environment variables.
 - Restrict access with `TELEGRAM_ADMIN_IDS`.
-- Run the bot only in a trusted Amnezia environment.
+- The bot container mounts `/var/run/docker.sock`. Treat this as privileged
+  access to the Docker host.
+- Run the bot only on a trusted server.
 - `create_client.py` writes private client keys into generated config files.
 
 ## Troubleshooting
@@ -193,10 +253,32 @@ Set the public address used by VPN clients:
 export AMNEZIA_PUBLIC_ENDPOINT="1.2.3.4"
 ```
 
+### `AMNEZIA_CONTAINER_NAME is required in docker-exec mode`
+
+Set the Docker container name of the running Amnezia container:
+
+```sh
+export AMNEZIA_CONTAINER_NAME="amnezia-awg"
+```
+
 ### `awg binary not found`
 
-Run the bot inside the AmneziaWG environment where `awg` is installed and
-available in `PATH`.
+Make sure `create_client.py` is executed inside the Amnezia container and that
+`awg` is installed there.
+
+### `docker: not found`
+
+Use the provided `Dockerfile`. It is based on Docker CLI image and includes the
+Docker client required for `docker exec`.
+
+### `Cannot connect to the Docker daemon`
+
+Make sure the Docker socket is mounted:
+
+```yaml
+volumes:
+  - /var/run/docker.sock:/var/run/docker.sock
+```
 
 ### `client config already exists`
 
