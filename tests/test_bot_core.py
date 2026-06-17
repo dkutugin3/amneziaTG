@@ -188,6 +188,16 @@ class BotCoreTest(unittest.TestCase):
 
         self.assertEqual(config.subscription_check_interval_seconds, 3600)
 
+    def test_load_config_from_mapping_supports_bot_username(self):
+        config = load_config_from_mapping({
+            "TELEGRAM_BOT_TOKEN": "token",
+            "TELEGRAM_ADMIN_IDS": "42",
+            "AMNEZIA_PUBLIC_ENDPOINT": "vpn.example.com",
+            "TELEGRAM_BOT_USERNAME": "@amnezia_tg_bot",
+        })
+
+        self.assertEqual(config.bot_username, "amnezia_tg_bot")
+
     def test_create_raises_safe_error_when_script_fails(self):
         def runner(command):
             return subprocess.CompletedProcess(command, 1, "", "ERROR: awg binary not found\n")

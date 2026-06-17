@@ -80,6 +80,7 @@ Set these environment variables before starting the bot:
 
 ```sh
 export TELEGRAM_BOT_TOKEN="123456:telegram-token"
+export TELEGRAM_BOT_USERNAME="your_bot_username"
 export TELEGRAM_ADMIN_IDS="123456789,987654321"
 export AMNEZIA_PUBLIC_ENDPOINT="vpn.example.com"
 export AMNEZIA_CONTAINER_NAME="amnezia-awg"
@@ -90,6 +91,9 @@ export SUBSCRIPTION_CHECK_INTERVAL_SECONDS="86400"
 Variables:
 
 - `TELEGRAM_BOT_TOKEN`: token received from BotFather.
+- `TELEGRAM_BOT_USERNAME`: bot username without `@`. This is optional, but
+  required if you want invite links like
+  `https://t.me/<bot_username>?start=<invite_key>` in admin replies.
 - `TELEGRAM_ADMIN_IDS`: comma-separated or space-separated Telegram user IDs.
 - `AMNEZIA_PUBLIC_ENDPOINT`: public IP address or DNS name clients should use.
 - `AMNEZIA_CONTAINER_NAME`: Docker container name of the running Amnezia
@@ -136,6 +140,7 @@ Edit `.env` and set real values:
 
 ```sh
 TELEGRAM_BOT_TOKEN=123456:real-token
+TELEGRAM_BOT_USERNAME=your_bot_username
 TELEGRAM_ADMIN_IDS=123456789
 AMNEZIA_PUBLIC_ENDPOINT=vpn.example.com
 AMNEZIA_CONTAINER_NAME=amnezia-awg
@@ -200,6 +205,7 @@ Slash command equivalents:
 /user_revoke <tg_id>
 /users
 /redeem <key>
+/start <key>
 /status
 /create
 /instructions
@@ -237,6 +243,17 @@ Broadcast flow:
 Invite keys bind to the first Telegram ID that redeems them. A revoked key
 removes bot access for the bound user. An expired subscription also blocks bot
 access and config generation.
+
+If `TELEGRAM_BOT_USERNAME` is configured, `Create invite` also returns a
+Telegram deep link:
+
+```text
+https://t.me/<bot_username>?start=AMZ-XXXX-XXXX-XXXX
+```
+
+Send this link to the user instead of copying the raw key. When the user opens
+the link and presses Start, the bot redeems the key automatically. The link is
+still one-time: the first Telegram ID that opens it gets the access.
 
 The bot checks expiring subscriptions in the background. It sends reminders to
 the user and admins when a subscription has 7 days and 1 day left. Reminder
@@ -331,6 +348,8 @@ After the upgrade:
 - Press `Help` in Telegram and confirm the admin menu contains `Extend user`.
 - Press `Create invite` and create a short test key, for example `7d`.
 - Press `Invite keys` and confirm the key shows an expiration date.
+- If `TELEGRAM_BOT_USERNAME` is set, confirm `Create invite` shows an invite
+  link.
 - Existing users should still show `forever` unless you extend or recreate
   their subscription.
 

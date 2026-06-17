@@ -21,6 +21,8 @@ from bot.bot_ui import (
     amnezia_instruction_text,
     broadcast_message_text,
     broadcast_preview_text,
+    invite_created_text,
+    invite_deep_link,
     keyboard_rows,
     report_admin_text,
     report_confirmation_text,
@@ -116,6 +118,24 @@ class BotUiTest(unittest.TestCase):
         self.assertIn("Alice", admin_text)
         self.assertIn("active", admin_text)
         self.assertIn("VPN does not connect", admin_text)
+
+    def test_invite_deep_link_uses_bot_username_and_key(self):
+        self.assertEqual(
+            invite_deep_link("amnezia_tg_bot", "AMZ-TEST-KEY"),
+            "https://t.me/amnezia_tg_bot?start=AMZ-TEST-KEY",
+        )
+
+    def test_invite_created_text_includes_key_and_optional_deep_link(self):
+        text = invite_created_text(
+            label="alice",
+            key="AMZ-TEST-KEY",
+            subscription_text="active until 2026-06-30",
+            bot_username="amnezia_tg_bot",
+        )
+
+        self.assertIn("AMZ-TEST-KEY", text)
+        self.assertIn("https://t.me/amnezia_tg_bot?start=AMZ-TEST-KEY", text)
+        self.assertIn("active until 2026-06-30", text)
 
 
 if __name__ == "__main__":

@@ -27,6 +27,7 @@ class BotConfig:
     token: str
     admin_ids: Set[int]
     public_endpoint: str
+    bot_username: Optional[str] = None
     clients_dir: Path = DEFAULT_CLIENTS_DIR
     create_client_script: Path = DEFAULT_CREATE_CLIENT_SCRIPT
     provision_mode: str = LOCAL_MODE
@@ -70,6 +71,7 @@ def load_config_from_env() -> BotConfig:
 def load_config_from_mapping(values: Mapping[str, str]) -> BotConfig:
     token = values.get("TELEGRAM_BOT_TOKEN", "").strip()
     public_endpoint = values.get("AMNEZIA_PUBLIC_ENDPOINT", "").strip()
+    bot_username = values.get("TELEGRAM_BOT_USERNAME", "").strip().lstrip("@") or None
     admin_ids = parse_admin_ids(values.get("TELEGRAM_ADMIN_IDS", ""))
 
     if not token:
@@ -110,6 +112,7 @@ def load_config_from_mapping(values: Mapping[str, str]) -> BotConfig:
         token=token,
         admin_ids=admin_ids,
         public_endpoint=public_endpoint,
+        bot_username=bot_username,
         clients_dir=clients_dir,
         create_client_script=script_path,
         provision_mode=provision_mode,

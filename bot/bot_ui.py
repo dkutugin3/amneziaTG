@@ -1,3 +1,6 @@
+from typing import Optional
+
+
 BTN_ACTIVATE = "Activate access"
 BTN_STATUS = "Status"
 BTN_CREATE = "Create config"
@@ -93,6 +96,37 @@ def broadcast_preview_text(message: str, recipient_count: int) -> str:
 
 def broadcast_message_text(message: str) -> str:
     return f"Amnezia VPN announcement\n\n{message}"
+
+
+def invite_deep_link(bot_username: str, key: str) -> str:
+    username = bot_username.strip().lstrip("@")
+    return f"https://t.me/{username}?start={key.strip()}"
+
+
+def invite_created_text(
+    label: str,
+    key: str,
+    subscription_text: str,
+    bot_username: Optional[str] = None,
+) -> str:
+    lines = [
+        f"Invite key created for {label}:",
+        "",
+        key,
+        "",
+        f"Subscription: {subscription_text}",
+    ]
+    if bot_username:
+        lines.extend([
+            "",
+            "Invite link:",
+            invite_deep_link(bot_username, key),
+        ])
+    lines.extend([
+        "",
+        "Send the key or invite link to the user. It will bind to the first Telegram ID that redeems it.",
+    ])
+    return "\n".join(lines)
 
 
 def report_confirmation_text() -> str:

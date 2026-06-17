@@ -18,6 +18,7 @@ try:
         amnezia_instruction_text,
         broadcast_message_text,
         broadcast_preview_text,
+        invite_created_text,
         keyboard_rows,
         report_admin_text,
         report_confirmation_text,
@@ -33,6 +34,7 @@ except ImportError:
         amnezia_instruction_text,
         broadcast_message_text,
         broadcast_preview_text,
+        invite_created_text,
         keyboard_rows,
         report_admin_text,
         report_confirmation_text,
@@ -229,6 +231,10 @@ def build_handlers(provisioner: Provisioner, access_store: AccessStore):
     async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         user_id = _user_id(update)
         if user_id is None:
+            return
+
+        if context.args:
+            await _redeem_key(update, context, context.args[0])
             return
 
         if provisioner.is_admin(user_id):
@@ -461,9 +467,12 @@ def build_handlers(provisioner: Provisioner, access_store: AccessStore):
         subscription_text = _format_subscription_status("active", invite.expires_at)
         await _reply(
             update,
-            f"Invite key created for {invite.label}:\n\n{invite.key}\n\n"
-            f"Subscription: {subscription_text}\n\n"
-            "Send this key to the user. It will bind to the first Telegram ID that redeems it.",
+            invite_created_text(
+                label=invite.label,
+                key=invite.key,
+                subscription_text=subscription_text,
+                bot_username=provisioner.config.bot_username,
+            ),
             _menu_markup(provisioner, admin_id),
         )
         await _notify_admins(

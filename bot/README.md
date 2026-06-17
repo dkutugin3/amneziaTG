@@ -18,6 +18,7 @@ Set these variables before starting the bot:
 
 ```sh
 export TELEGRAM_BOT_TOKEN="123456:telegram-token"
+export TELEGRAM_BOT_USERNAME="your_bot_username"
 export TELEGRAM_ADMIN_IDS="123456789,987654321"
 export AMNEZIA_PUBLIC_ENDPOINT="vpn.example.com"
 export AMNEZIA_PROVISION_MODE="docker-exec"
@@ -81,6 +82,7 @@ Slash command examples:
 ```text
 /key_create alice 30d
 /key_create bob forever
+/start AMZ-XXXX-XXXX-XXXX
 /user_extend 123456789 90d
 /user_extend 123456789 forever
 /broadcast We will update the VPN server tonight at 23:00 UTC.
@@ -90,6 +92,10 @@ Slash command examples:
 Broadcasts are delivered only to active users. Revoked and expired
 subscriptions are skipped. The bot shows a preview and requires `Send broadcast`
 before delivery.
+
+If `TELEGRAM_BOT_USERNAME` is configured, `Create invite` returns a deep link
+like `https://t.me/<bot_username>?start=<invite_key>`. Opening that link redeems
+the invite key automatically for the first Telegram ID that presses Start.
 
 Admins receive Telegram notifications when users redeem keys, check status,
 create configs, when admins create/revoke/list access, and when subscriptions
