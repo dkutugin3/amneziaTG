@@ -13,6 +13,7 @@ except ImportError:
 DEFAULT_CLIENTS_DIR = Path("/opt/amnezia/awg/clients")
 DEFAULT_CREATE_CLIENT_SCRIPT = Path("/opt/amnezia/awg/bot/create_client.py")
 DEFAULT_DOCKER_BINARY = "docker"
+DEFAULT_SUBSCRIPTION_CHECK_INTERVAL_SECONDS = 24 * 60 * 60
 LOCAL_MODE = "local"
 DOCKER_EXEC_MODE = "docker-exec"
 
@@ -32,6 +33,7 @@ class BotConfig:
     amnezia_container_name: Optional[str] = None
     docker_binary: str = DEFAULT_DOCKER_BINARY
     db_path: Path = DEFAULT_DB_PATH
+    subscription_check_interval_seconds: int = DEFAULT_SUBSCRIPTION_CHECK_INTERVAL_SECONDS
 
 
 @dataclass(frozen=True)
@@ -95,6 +97,14 @@ def load_config_from_mapping(values: Mapping[str, str]) -> BotConfig:
     )
     docker_binary = values.get("DOCKER_BINARY", DEFAULT_DOCKER_BINARY).strip()
     db_path = Path(values.get("AMNEZIA_TG_DB_PATH", str(DEFAULT_DB_PATH)))
+    subscription_check_interval_seconds = int(
+        values.get(
+            "SUBSCRIPTION_CHECK_INTERVAL_SECONDS",
+            str(DEFAULT_SUBSCRIPTION_CHECK_INTERVAL_SECONDS),
+        )
+    )
+    if subscription_check_interval_seconds <= 0:
+        raise RuntimeError("SUBSCRIPTION_CHECK_INTERVAL_SECONDS must be greater than zero")
 
     return BotConfig(
         token=token,
@@ -106,6 +116,7 @@ def load_config_from_mapping(values: Mapping[str, str]) -> BotConfig:
         amnezia_container_name=amnezia_container_name,
         docker_binary=docker_binary,
         db_path=db_path,
+        subscription_check_interval_seconds=subscription_check_interval_seconds,
     )
 
 

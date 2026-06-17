@@ -178,6 +178,16 @@ class BotCoreTest(unittest.TestCase):
         self.assertEqual(config.provision_mode, "docker-exec")
         self.assertEqual(config.amnezia_container_name, "amnezia-awg")
 
+    def test_load_config_from_mapping_supports_subscription_check_interval(self):
+        config = load_config_from_mapping({
+            "TELEGRAM_BOT_TOKEN": "token",
+            "TELEGRAM_ADMIN_IDS": "42",
+            "AMNEZIA_PUBLIC_ENDPOINT": "vpn.example.com",
+            "SUBSCRIPTION_CHECK_INTERVAL_SECONDS": "3600",
+        })
+
+        self.assertEqual(config.subscription_check_interval_seconds, 3600)
+
     def test_create_raises_safe_error_when_script_fails(self):
         def runner(command):
             return subprocess.CompletedProcess(command, 1, "", "ERROR: awg binary not found\n")

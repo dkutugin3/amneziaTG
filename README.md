@@ -84,6 +84,7 @@ export TELEGRAM_ADMIN_IDS="123456789,987654321"
 export AMNEZIA_PUBLIC_ENDPOINT="vpn.example.com"
 export AMNEZIA_CONTAINER_NAME="amnezia-awg"
 export AMNEZIA_TG_DB_PATH="/data/amnezia_tg.db"
+export SUBSCRIPTION_CHECK_INTERVAL_SECONDS="86400"
 ```
 
 Variables:
@@ -94,6 +95,8 @@ Variables:
 - `AMNEZIA_CONTAINER_NAME`: Docker container name of the running Amnezia
   container.
 - `AMNEZIA_TG_DB_PATH`: SQLite database path for invite keys and user records.
+- `SUBSCRIPTION_CHECK_INTERVAL_SECONDS`: how often the bot checks expiring
+  subscriptions. The default is `86400` seconds, which is once per day.
 
 Optional overrides:
 
@@ -137,6 +140,7 @@ TELEGRAM_ADMIN_IDS=123456789
 AMNEZIA_PUBLIC_ENDPOINT=vpn.example.com
 AMNEZIA_CONTAINER_NAME=amnezia-awg
 AMNEZIA_TG_DB_PATH=/data/amnezia_tg.db
+SUBSCRIPTION_CHECK_INTERVAL_SECONDS=86400
 ```
 
 Start the bot:
@@ -164,38 +168,86 @@ a fallback, but the normal flow is button-driven.
 
 Admin commands:
 
-- `Create invite`: create a one-time invite key for a friend.
-- `Invite keys`: list invite labels, binding status, and revoked state.
+- `Create invite`: create a one-time invite key for a friend and set the
+  subscription duration.
+- `Invite keys`: list invite labels, binding status, revoked state, and
+  subscription status.
+- `Extend user`: extend a user's subscription or make it permanent.
+- `Broadcast`: send a mass announcement to all active users.
 - `Revoke key`: revoke an unused or already-bound key.
 - `Revoke user`: revoke access for an activated user.
-- `Users`: list activated users.
+- `Users`: list activated users and their subscription status.
 
 User commands:
 
 - `Activate access`: enter and bind a one-time invite key.
 - `Status`: check access and VPN config status.
 - `Create config`: create a VPN config for the current Telegram user.
+- `Report issue`: send a problem report to admins. This is available even
+  before access activation.
+- `Amnezia instructions`: show how to install Amnezia VPN and import the
+  `vpn://` configuration string.
 - `Help`: show available actions.
 
 Slash command equivalents:
 
 ```text
-/key_create <name>
+/key_create <name> <duration>
 /keys
+/user_extend <tg_id> <duration>
+/broadcast <message>
 /key_revoke <key>
 /user_revoke <tg_id>
 /users
 /redeem <key>
 /status
 /create
+/instructions
+/report <message>
 ```
 
+Supported subscription durations:
+
+- `7d`, `30d`, `90d`, `365d`
+- `2w`
+- `1m` (30 days)
+- `1y` (365 days)
+- `forever`
+
+Examples:
+
+```text
+/key_create alice 30d
+/key_create bob forever
+/user_extend 123456789 90d
+/user_extend 123456789 forever
+/broadcast We will update the VPN server tonight at 23:00 UTC.
+/report VPN does not connect after importing the config.
+```
+
+Broadcast flow:
+
+- Press `Broadcast` or run `/broadcast <message>`.
+- The bot shows a preview and recipient count.
+- Press `Send broadcast` to deliver the message, or `Cancel` to discard it.
+- Recipients are active users only. Revoked and expired subscriptions are
+  skipped.
+- Admins receive a delivery summary with delivered and failed counts.
+
 Invite keys bind to the first Telegram ID that redeems them. A revoked key
-removes access for the bound user.
+removes bot access for the bound user. An expired subscription also blocks bot
+access and config generation.
+
+The bot checks expiring subscriptions in the background. It sends reminders to
+the user and admins when a subscription has 7 days and 1 day left. Reminder
+state is stored in SQLite, so container restarts do not resend already-sent
+reminders.
 
 Admins receive Telegram notifications for access-key redemption attempts,
 config creation attempts, status checks, invite creation, invite revocation,
-user revocation, and admin list actions.
+user revocation, subscription extension, subscription reminders, and admin list
+actions. User reports are also delivered to all admins with Telegram identity,
+access status, and report text.
 
 Clients are named as:
 
@@ -237,12 +289,57 @@ created client name in SQLite.
 If a config file already exists for the Telegram user, the bot does not
 recreate it. It replies that the config already exists.
 
+When a new config is created, the bot explicitly labels the returned `vpn://`
+value as an Amnezia VPN configuration string and includes short import
+instructions. Users can also press `Amnezia instructions` at any time.
+
+Current subscription enforcement is handled at the bot/access layer. If a user
+already downloaded a VPN config, expiring or revoking the bot subscription does
+not yet remove the existing AmneziaWG peer from the running server. Add a
+server-side deprovision step before relying on expiration as hard VPN traffic
+cutoff.
+
+## Production Upgrade Notes
+
+The SQLite schema is migrated automatically at bot startup. Existing invite
+keys and users are preserved, and old records get `expires_at = NULL`, which
+means `forever`.
+
+Recommended upgrade flow:
+
+```sh
+cd /path/to/amneziaTG
+git pull
+mkdir -p backups
+docker compose cp amnezia-tg-bot:/data/amnezia_tg.db ./backups/amnezia_tg.db.backup
+docker compose down
+docker exec amnezia-awg mkdir -p /opt/amnezia/awg/bot
+docker cp bot/create_client.py amnezia-awg:/opt/amnezia/awg/bot/create_client.py
+docker compose up -d --build
+docker compose logs -f amnezia-tg-bot
+```
+
+If the bot container is already stopped and `docker compose cp` cannot read the
+database, back up the named volume directly. Find the exact volume with:
+
+```sh
+docker volume ls | grep amnezia-tg-data
+```
+
+After the upgrade:
+
+- Press `Help` in Telegram and confirm the admin menu contains `Extend user`.
+- Press `Create invite` and create a short test key, for example `7d`.
+- Press `Invite keys` and confirm the key shows an expiration date.
+- Existing users should still show `forever` unless you extend or recreate
+  their subscription.
+
 ## Local Development
 
 Run unit tests:
 
 ```sh
-python3 -m unittest tests/test_bot_core.py tests/test_access_store.py
+python3 -m unittest tests/test_bot_core.py tests/test_access_store.py tests/test_bot_ui.py
 ```
 
 Compile-check Python files:
@@ -256,6 +353,7 @@ PYTHONPYCACHEPREFIX=/tmp/pycache \
   bot/script.py \
   bot/telegram_bot.py \
   tests/test_access_store.py \
+  tests/test_bot_ui.py \
   tests/test_bot_core.py
 ```
 
