@@ -97,7 +97,7 @@ def broadcast_preview_text(message: str, recipient_count: int) -> str:
 
 
 def broadcast_message_text(message: str) -> str:
-    return f"Объявление Amnezia VPN\n\n{message}"
+    return f"Объявление «Ковчег»\n\n{message}"
 
 
 def invite_deep_link(bot_username: str, key: str) -> str:

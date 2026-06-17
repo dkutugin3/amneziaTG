@@ -104,7 +104,7 @@ class BotUiTest(unittest.TestCase):
         self.assertIn("Предпросмотр рассылки", preview)
         self.assertIn("Получателей: 3", preview)
         self.assertIn("Update tonight", preview)
-        self.assertIn("Объявление Amnezia VPN", message)
+        self.assertIn("Объявление «Ковчег»", message)
         self.assertIn("Update tonight", message)
 
     def test_report_text_helpers_format_confirmation_and_admin_notification(self):
