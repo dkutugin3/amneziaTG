@@ -19,14 +19,11 @@ def keyboard_rows(is_admin: bool, is_allowed: bool) -> list[list[str]]:
     if is_admin:
         return [
             [BTN_STATUS, BTN_CREATE],
+            [BTN_BROADCAST, BTN_REPORT],
             [BTN_KEY_CREATE, BTN_KEYS],
-            [BTN_USERS],
-            [BTN_USER_EXTEND],
+            [BTN_USERS, BTN_USER_EXTEND],
             [BTN_KEY_REVOKE, BTN_USER_REVOKE],
-            [BTN_BROADCAST],
-            [BTN_REPORT],
-            [BTN_INSTRUCTIONS],
-            [BTN_HELP],
+            [BTN_INSTRUCTIONS, BTN_HELP],
         ]
 
     if is_allowed:

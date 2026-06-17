@@ -54,6 +54,12 @@ class BotUiTest(unittest.TestCase):
         self.assertIn(BTN_BROADCAST, flat)
         self.assertIn(BTN_REPORT, flat)
 
+    def test_admin_keyboard_keeps_broadcast_visible_near_top(self):
+        top_rows = keyboard_rows(is_admin=True, is_allowed=True)[:3]
+        top_buttons = [button for row in top_rows for button in row]
+
+        self.assertIn(BTN_BROADCAST, top_buttons)
+
     def test_action_for_button_maps_input_buttons(self):
         self.assertEqual(action_for_button(BTN_ACTIVATE), "redeem")
         self.assertEqual(action_for_button(BTN_KEY_CREATE), "key_create")
