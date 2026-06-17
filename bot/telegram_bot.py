@@ -4,8 +4,16 @@ import logging
 from datetime import datetime
 from typing import Optional
 
-from telegram import ReplyKeyboardMarkup, Update
-from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, Update
+from telegram.ext import (
+    Application,
+    CallbackQueryHandler,
+    CommandHandler,
+    ContextTypes,
+    MessageHandler,
+    PreCheckoutQueryHandler,
+    filters,
+)
 
 try:
     from bot.access_store import AccessStore
@@ -23,6 +31,18 @@ try:
         report_admin_text,
         report_confirmation_text,
     )
+    from bot.payments import (
+        buy_intro_text,
+        invoice_description,
+        invoice_title,
+        parse_duration_label,
+        payment_refunded_text,
+        payment_success_text,
+        paysupport_text,
+        plan_options,
+        support_text,
+        terms_text,
+    )
 except ImportError:
     from access_store import AccessStore
     from bot_core import Provisioner, load_config_from_env
@@ -38,6 +58,18 @@ except ImportError:
         keyboard_rows,
         report_admin_text,
         report_confirmation_text,
+    )
+    from payments import (
+        buy_intro_text,
+        invoice_description,
+        invoice_title,
+        parse_duration_label,
+        payment_refunded_text,
+        payment_success_text,
+        paysupport_text,
+        plan_options,
+        support_text,
+        terms_text,
     )
 
 
@@ -204,10 +236,14 @@ def user_help_text() -> str:
         "Активировать доступ — активировать инвайт-ключ\n"
         "Создать конфиг — создать VPN-конфиг\n"
         "Получить конфиг — получить существующий VPN-конфиг\n"
+        "Купить подписку — продлить подписку за Telegram Stars\n"
         "Сообщить о проблеме — сообщить админам о проблеме\n"
         "Инструкция Amnezia — инструкция по установке конфига\n"
         "Статус — проверить статус\n"
-        "Помощь — показать это меню"
+        "Помощь — показать это меню\n\n"
+        "/terms — условия использования\n"
+        "/support — контакты поддержки\n"
+        "/paysupport — поддержка по платежам"
     )
 
 
@@ -221,11 +257,16 @@ def admin_help_text() -> str:
         "Отозвать доступ — отозвать доступ пользователя\n"
         "Пользователи — список пользователей\n"
         "Рассылка — массовая рассылка активным пользователям\n"
+        "Возвраты — список платежей в Stars и возвраты\n"
         "Сообщить о проблеме — сообщить админам о проблеме\n"
         "Создать конфиг — создать VPN-конфиг для себя\n"
         "Получить конфиг — получить существующий VPN-конфиг\n"
+        "Купить подписку — продлить свою подписку\n"
         "Инструкция Amnezia — инструкция по установке конфига\n"
-        "Статус — проверить свой статус"
+        "Статус — проверить свой статус\n\n"
+        "/terms — условия использования\n"
+        "/support — контакты поддержки\n"
+        "/paysupport — поддержка по платежам"
     )
 
 
@@ -404,6 +445,302 @@ def build_handlers(provisioner: Provisioner, access_store: AccessStore):
             return
 
         await _reply(update, amnezia_instruction_text(), _menu_markup(provisioner, user_id))
+
+    async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        user_id = _user_id(update)
+        if user_id is None:
+            return
+
+        pricing = provisioner.config.star_pricing
+        if not pricing:
+            await _reply(update, "Оплата временно недоступна. Напиши администратору.", _menu_markup(provisioner, user_id))
+            return
+
+        options = plan_options(pricing)
+        buttons: list[list[InlineKeyboardButton]] = []
+        for option in options:
+            buttons.append([
+                InlineKeyboardButton(
+                    text=f"{option.label} — {option.stars} Stars",
+                    callback_data=f"buy:{option.duration}:{option.stars}",
+                )
+            ])
+        markup = InlineKeyboardMarkup(buttons)
+        await update.message.reply_text(
+            buy_intro_text(pricing),
+            reply_markup=markup,
+        )
+
+    async def buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        query = update.callback_query
+        if query is None or query.data is None:
+            return
+
+        parts = query.data.split(":")
+        if len(parts) != 3 or parts[0] != "buy":
+            return
+
+        duration = parts[1]
+        try:
+            stars = int(parts[2])
+        except ValueError:
+            return
+
+        if duration not in provisioner.config.star_pricing:
+            await query.answer("Тариф не найден. Обнови меню.")
+            return
+
+        if provisioner.config.star_pricing[duration] != stars:
+            await query.answer("Цена изменилась. Обнови меню.")
+            return
+
+        await query.answer()
+
+        if query.from_user is None:
+            return
+        tg_id = query.from_user.id
+
+        try:
+            await context.bot.send_invoice(
+                chat_id=update.effective_chat.id if update.effective_chat else tg_id,
+                title=invoice_title(duration),
+                description=invoice_description(duration, stars),
+                payload=f"vpn_sub:{duration}:{tg_id}",
+                provider_token="",
+                currency="XTR",
+                prices=[{"label": parse_duration_label(duration), "amount": stars}],
+                start_parameter="buy",
+            )
+        except Exception:
+            logger.exception("failed to send invoice to user %s", tg_id)
+            await query.message.reply_text(
+                "Не удалось выставить счёт. Напиши администратору.",
+                reply_markup=_menu_markup(provisioner, tg_id),
+            )
+
+    async def pre_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        query = update.pre_checkout_query
+        if query is None:
+            return
+
+        if query.invoice_payload is None:
+            await query.answer(ok=False, error_message="Некорректный платёж.")
+            return
+
+        parts = query.invoice_payload.split(":")
+        if len(parts) < 2 or parts[0] != "vpn_sub":
+            await query.answer(ok=False, error_message="Некорректный платёж.")
+            return
+
+        duration = parts[1]
+        if duration not in provisioner.config.star_pricing:
+            await query.answer(ok=False, error_message="Тариф не найден.")
+            return
+
+        if query.total_amount != provisioner.config.star_pricing[duration]:
+            await query.answer(ok=False, error_message="Сумма не совпадает с тарифом.")
+            return
+
+        await query.answer(ok=True)
+
+    async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        message = update.message
+        if message is None or message.successful_payment is None:
+            return
+
+        payment = message.successful_payment
+        if payment.invoice_payload is None:
+            logger.warning("successful_payment without invoice_payload from user %s", _actor(update))
+            return
+
+        parts = payment.invoice_payload.split(":")
+        if len(parts) < 2 or parts[0] != "vpn_sub":
+            logger.warning("unexpected invoice_payload: %s", payment.invoice_payload)
+            return
+
+        duration = parts[1]
+        if duration not in provisioner.config.star_pricing:
+            logger.warning("unknown duration in successful_payment: %s", duration)
+            return
+
+        user_id = _user_id(update)
+        if user_id is None:
+            return
+
+        charge_id = payment.telegram_payment_charge_id or ""
+        stars = payment.total_amount or 0
+
+        try:
+            access_store.record_star_payment(
+                tg_id=user_id,
+                telegram_payment_charge_id=charge_id,
+                duration=duration,
+                stars=stars,
+            )
+        except Exception:
+            logger.exception("failed to record star payment for user %s", user_id)
+
+        if not access_store.is_user_active(user_id):
+            invite_label = f"stars_{user_id}"
+            try:
+                access_store.create_invite(
+                    label=invite_label,
+                    created_by_tg_id=user_id,
+                    duration=duration,
+                )
+            except Exception:
+                logger.exception("failed to create invite for stars buyer %s", user_id)
+                await _reply(
+                    update,
+                    "Оплата получена, но не удалось активировать доступ. Напиши /paysupport.",
+                    _menu_markup(provisioner, user_id),
+                )
+                return
+
+            invites = access_store.list_invites()
+            for item in invites:
+                if item.label == invite_label and item.tg_id == 0:
+                    access_store.redeem_invite(
+                        _invite_key_for_label(invites, invite_label),
+                        tg_id=user_id,
+                    )
+                    break
+            else:
+                logger.warning("no invite created for stars buyer %s", user_id)
+                await _reply(
+                    update,
+                    "Оплата получена, но не удалось привязать ключ. Напиши /paysupport.",
+                    _menu_markup(provisioner, user_id),
+                )
+                return
+
+        try:
+            updated = access_store.extend_user(user_id, duration)
+        except ValueError:
+            updated = False
+
+        if not updated:
+            logger.warning("extend_user failed for stars buyer %s, duration=%s", user_id, duration)
+            await _reply(
+                update,
+                "Оплата получена, но продлить подписку не удалось. Напиши /paysupport.",
+                _menu_markup(provisioner, user_id),
+            )
+            return
+
+        await _reply(
+            update,
+            payment_success_text(duration),
+            _menu_markup(provisioner, user_id),
+        )
+        await _notify_admins(
+            context,
+            provisioner,
+            "Stars payment\n"
+            f"user: {_actor(update)}\n"
+            f"duration: {duration}\n"
+            f"stars: {stars}\n"
+            f"charge_id: {charge_id}",
+        )
+
+    def _invite_key_for_label(invites, label):
+        for item in invites:
+            if item.label == label:
+                return getattr(item, "key", label)
+        return label
+
+    async def terms(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        user_id = _user_id(update)
+        if user_id is None:
+            return
+        await _reply(
+            update,
+            terms_text(provisioner.config.support_contact, provisioner.config.terms_url),
+            _menu_markup(provisioner, user_id),
+        )
+
+    async def support(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        user_id = _user_id(update)
+        if user_id is None:
+            return
+        await _reply(
+            update,
+            support_text(provisioner.config.support_contact),
+            _menu_markup(provisioner, user_id),
+        )
+
+    async def paysupport(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        user_id = _user_id(update)
+        if user_id is None:
+            return
+        await _reply(
+            update,
+            paysupport_text(provisioner.config.support_contact),
+            _menu_markup(provisioner, user_id),
+        )
+
+    async def refunds(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        admin_id = await _require_admin(update, provisioner)
+        if admin_id is None:
+            return
+
+        if context.args:
+            await _refund_star_payment(update, context, context.args[0], admin_id)
+            return
+
+        payments = access_store.list_star_payments(limit=30)
+        if not payments:
+            await _reply(update, "Платежей в Stars пока нет.", _menu_markup(provisioner, admin_id))
+            return
+
+        lines = []
+        for payment in payments[:30]:
+            state = "возвращён" if payment.refunded else "активен"
+            lines.append(
+                f"{payment.tg_id}: {payment.duration}, {payment.stars} XTR, {state}\n"
+                f"  charge_id: {payment.telegram_payment_charge_id}"
+            )
+
+        await _reply(update, "\n".join(lines), _menu_markup(provisioner, admin_id))
+        await _notify_admins(context, provisioner, f"Список платежей Stars\nадмин: {_actor(update)}")
+
+    async def _refund_star_payment(
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        charge_id: str,
+        admin_id: int,
+    ) -> None:
+        record = access_store.get_star_payment_by_charge_id(charge_id)
+        if record is None:
+            await _reply(update, "Платёж не найден.", _menu_markup(provisioner, admin_id))
+            return
+
+        if record.refunded:
+            await _reply(update, "Платёж уже возвращён.", _menu_markup(provisioner, admin_id))
+            return
+
+        try:
+            await context.bot.refund_star_payment(
+                user_id=record.tg_id,
+                telegram_payment_charge_id=record.telegram_payment_charge_id,
+            )
+        except Exception:
+            logger.exception("failed to refund star payment %s", charge_id)
+            await _reply(
+                update,
+                "Не удалось вернуть платёж. Проверь логи.",
+                _menu_markup(provisioner, admin_id),
+            )
+            return
+
+        access_store.mark_star_payment_refunded(charge_id)
+        await _reply(update, payment_refunded_text(), _menu_markup(provisioner, admin_id))
+        await _notify_admins(
+            context,
+            provisioner,
+            f"Refund Stars payment\nadmin: {_actor(update)}\n"
+            f"tg_id: {record.tg_id}\nstars: {record.stars}\ncharge_id: {charge_id}",
+        )
 
     async def report(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         user_id = _user_id(update)
@@ -829,6 +1166,11 @@ def build_handlers(provisioner: Provisioner, access_store: AccessStore):
         if pending_action == "report_issue":
             await _send_report(update, context, text, user_id)
             return
+        if pending_action == "refunds":
+            admin_id = await _require_admin(update, provisioner)
+            if admin_id is not None:
+                await _refund_star_payment(update, context, text, admin_id)
+            return
 
         if action == "redeem":
             context.user_data["pending_action"] = "redeem"
@@ -845,6 +1187,9 @@ def build_handlers(provisioner: Provisioner, access_store: AccessStore):
             return
         if action == "instructions":
             await instructions(update, context)
+            return
+        if action == "buy":
+            await buy(update, context)
             return
         if action == "report":
             await report(update, context)
@@ -889,6 +1234,16 @@ def build_handlers(provisioner: Provisioner, access_store: AccessStore):
         if action == "broadcast":
             await broadcast(update, context)
             return
+        if action == "refunds":
+            admin_id = await _require_admin(update, provisioner)
+            if admin_id is not None:
+                context.user_data["pending_action"] = "refunds"
+                await _reply(
+                    update,
+                    "Отправь telegram_payment_charge_id для возврата или пустое сообщение для списка.",
+                    _cancel_markup(),
+                )
+            return
 
         await _reply(update, "Выбери действие кнопкой ниже.", _menu_markup(provisioner, user_id))
 
@@ -900,6 +1255,10 @@ def build_handlers(provisioner: Provisioner, access_store: AccessStore):
         CommandHandler("create", create),
         CommandHandler("get_config", get_config),
         CommandHandler("instructions", instructions),
+        CommandHandler("buy", buy),
+        CommandHandler("terms", terms),
+        CommandHandler("support", support),
+        CommandHandler("paysupport", paysupport),
         CommandHandler("report", report),
         CommandHandler("key_create", key_create),
         CommandHandler("keys", keys),
@@ -908,6 +1267,10 @@ def build_handlers(provisioner: Provisioner, access_store: AccessStore):
         CommandHandler("user_revoke", user_revoke),
         CommandHandler("user_extend", user_extend),
         CommandHandler("broadcast", broadcast),
+        CommandHandler("refunds", refunds),
+        PreCheckoutQueryHandler(pre_checkout),
+        MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment),
+        CallbackQueryHandler(buy_callback, pattern=r"^buy:"),
         MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text),
     ]
 

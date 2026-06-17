@@ -5,6 +5,7 @@ BTN_ACTIVATE = "Активировать доступ"
 BTN_STATUS = "Статус"
 BTN_CREATE = "Создать конфиг"
 BTN_GET_CONFIG = "Получить конфиг"
+BTN_BUY = "Купить подписку"
 BTN_REPORT = "Сообщить о проблеме"
 BTN_INSTRUCTIONS = "Инструкция Amnezia"
 BTN_HELP = "Помощь"
@@ -15,6 +16,7 @@ BTN_USER_EXTEND = "Продлить подписку"
 BTN_USER_REVOKE = "Отозвать доступ"
 BTN_USERS = "Пользователи"
 BTN_BROADCAST = "Рассылка"
+BTN_REFUNDS = "Возвраты"
 BTN_SEND_BROADCAST = "Отправить рассылку"
 BTN_CANCEL = "Отмена"
 
@@ -23,7 +25,8 @@ def keyboard_rows(is_admin: bool, is_allowed: bool) -> list[list[str]]:
     if is_admin:
         return [
             [BTN_STATUS, BTN_CREATE, BTN_GET_CONFIG],
-            [BTN_BROADCAST, BTN_REPORT],
+            [BTN_BUY, BTN_REPORT],
+            [BTN_BROADCAST, BTN_REFUNDS],
             [BTN_KEY_CREATE, BTN_KEYS],
             [BTN_USERS, BTN_USER_EXTEND],
             [BTN_KEY_REVOKE, BTN_USER_REVOKE],
@@ -33,7 +36,7 @@ def keyboard_rows(is_admin: bool, is_allowed: bool) -> list[list[str]]:
     if is_allowed:
         return [
             [BTN_STATUS, BTN_CREATE, BTN_GET_CONFIG],
-            [BTN_REPORT],
+            [BTN_BUY, BTN_REPORT],
             [BTN_INSTRUCTIONS],
             [BTN_HELP],
         ]
@@ -52,6 +55,7 @@ def action_for_button(text: str) -> str:
         BTN_STATUS: "status",
         BTN_CREATE: "create",
         BTN_GET_CONFIG: "get_config",
+        BTN_BUY: "buy",
         BTN_REPORT: "report",
         BTN_INSTRUCTIONS: "instructions",
         BTN_HELP: "help",
@@ -62,6 +66,7 @@ def action_for_button(text: str) -> str:
         BTN_USER_REVOKE: "user_revoke",
         BTN_USERS: "users",
         BTN_BROADCAST: "broadcast",
+        BTN_REFUNDS: "refunds",
         BTN_SEND_BROADCAST: "send_broadcast",
         BTN_CANCEL: "cancel",
     }.get(text.strip(), "")

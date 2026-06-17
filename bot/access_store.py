@@ -58,6 +58,17 @@ class SubscriptionNotification:
     days_left: int
 
 
+@dataclass(frozen=True)
+class StarPaymentRecord:
+    payment_id: int
+    tg_id: int
+    telegram_payment_charge_id: str
+    duration: str
+    stars: int
+    created_at: int
+    refunded: bool = False
+
+
 def normalize_key(key: str) -> str:
     return key.strip().upper()
 
@@ -407,6 +418,91 @@ class AccessStore:
                 (self.clock(), tg_id),
             )
 
+    def record_star_payment(
+        self,
+        tg_id: int,
+        telegram_payment_charge_id: str,
+        duration: str,
+        stars: int,
+    ) -> int:
+        with self._connect() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO star_payments (
+                    tg_id, telegram_payment_charge_id, duration, stars, created_at
+                )
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (tg_id, telegram_payment_charge_id, duration, stars, self.clock()),
+            )
+            return int(cursor.lastrowid)
+
+    def get_star_payment_by_charge_id(
+        self,
+        telegram_payment_charge_id: str,
+    ) -> Optional[StarPaymentRecord]:
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT id, tg_id, telegram_payment_charge_id, duration, stars,
+                       created_at, refunded_at
+                FROM star_payments
+                WHERE telegram_payment_charge_id = ?
+                """,
+                (telegram_payment_charge_id,),
+            ).fetchone()
+
+        if row is None:
+            return None
+
+        return StarPaymentRecord(
+            payment_id=int(row["id"]),
+            tg_id=int(row["tg_id"]),
+            telegram_payment_charge_id=row["telegram_payment_charge_id"],
+            duration=row["duration"],
+            stars=int(row["stars"]),
+            created_at=int(row["created_at"]),
+            refunded=row["refunded_at"] is not None,
+        )
+
+    def mark_star_payment_refunded(self, telegram_payment_charge_id: str) -> bool:
+        with self._connect() as conn:
+            result = conn.execute(
+                """
+                UPDATE star_payments
+                SET refunded_at = COALESCE(refunded_at, ?)
+                WHERE telegram_payment_charge_id = ? AND refunded_at IS NULL
+                """,
+                (self.clock(), telegram_payment_charge_id),
+            )
+            return result.rowcount > 0
+
+    def list_star_payments(self, limit: int = 50) -> list[StarPaymentRecord]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT id, tg_id, telegram_payment_charge_id, duration, stars,
+                       created_at, refunded_at
+                FROM star_payments
+                ORDER BY created_at DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+
+        return [
+            StarPaymentRecord(
+                payment_id=int(row["id"]),
+                tg_id=int(row["tg_id"]),
+                telegram_payment_charge_id=row["telegram_payment_charge_id"],
+                duration=row["duration"],
+                stars=int(row["stars"]),
+                created_at=int(row["created_at"]),
+                refunded=row["refunded_at"] is not None,
+            )
+            for row in rows
+        ]
+
     def _init_schema(self) -> None:
         with self._connect() as conn:
             conn.execute(
@@ -435,6 +531,19 @@ class AccessStore:
                     tg_id INTEGER PRIMARY KEY,
                     client_name TEXT NOT NULL,
                     created_at INTEGER NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS star_payments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    tg_id INTEGER NOT NULL,
+                    telegram_payment_charge_id TEXT NOT NULL UNIQUE,
+                    duration TEXT NOT NULL,
+                    stars INTEGER NOT NULL,
+                    created_at INTEGER NOT NULL,
+                    refunded_at INTEGER
                 )
                 """
             )

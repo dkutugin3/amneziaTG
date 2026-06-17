@@ -212,6 +212,60 @@ class AccessStoreTest(unittest.TestCase):
 
             self.assertEqual(store.subscription_notifications_due(), [])
 
+    def test_record_star_payment_persists_charge(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = AccessStore(Path(tmp) / "db.sqlite")
+
+            payment_id = store.record_star_payment(
+                tg_id=42,
+                telegram_payment_charge_id="charge-1",
+                duration="30d",
+                stars=75,
+            )
+
+            self.assertGreater(payment_id, 0)
+            record = store.get_star_payment_by_charge_id("charge-1")
+            self.assertIsNotNone(record)
+            self.assertEqual(record.tg_id, 42)
+            self.assertEqual(record.duration, "30d")
+            self.assertEqual(record.stars, 75)
+            self.assertFalse(record.refunded)
+
+    def test_get_star_payment_by_charge_id_returns_none_for_missing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = AccessStore(Path(tmp) / "db.sqlite")
+
+            self.assertIsNone(store.get_star_payment_by_charge_id("nope"))
+
+    def test_mark_star_payment_refunded_marks_existing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = AccessStore(Path(tmp) / "db.sqlite")
+            store.record_star_payment(
+                tg_id=42,
+                telegram_payment_charge_id="charge-1",
+                duration="30d",
+                stars=75,
+            )
+
+            self.assertTrue(store.mark_star_payment_refunded("charge-1"))
+            self.assertFalse(store.mark_star_payment_refunded("charge-1"))
+            self.assertTrue(store.get_star_payment_by_charge_id("charge-1").refunded)
+
+    def test_list_star_payments_returns_recent_first(self):
+        times = iter([100, 200])
+        with tempfile.TemporaryDirectory() as tmp:
+            store = AccessStore(
+                Path(tmp) / "db.sqlite",
+                clock=lambda: next(times),
+            )
+            store.record_star_payment(42, "charge-1", "7d", 25)
+            store.record_star_payment(43, "charge-2", "30d", 75)
+
+            payments = store.list_star_payments()
+            self.assertEqual(len(payments), 2)
+            self.assertEqual(payments[0].telegram_payment_charge_id, "charge-2")
+            self.assertEqual(payments[1].telegram_payment_charge_id, "charge-1")
+
 
 if __name__ == "__main__":
     unittest.main()

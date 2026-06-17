@@ -3,6 +3,7 @@ import unittest
 from bot.bot_ui import (
     BTN_ACTIVATE,
     BTN_BROADCAST,
+    BTN_BUY,
     BTN_CANCEL,
     BTN_CREATE,
     BTN_GET_CONFIG,
@@ -11,6 +12,7 @@ from bot.bot_ui import (
     BTN_KEY_CREATE,
     BTN_KEY_REVOKE,
     BTN_KEYS,
+    BTN_REFUNDS,
     BTN_REPORT,
     BTN_SEND_BROADCAST,
     BTN_STATUS,
@@ -40,7 +42,12 @@ class BotUiTest(unittest.TestCase):
     def test_allowed_user_keyboard_offers_status_create_instructions_and_help(self):
         self.assertEqual(
             keyboard_rows(is_admin=False, is_allowed=True),
-            [[BTN_STATUS, BTN_CREATE, BTN_GET_CONFIG], [BTN_REPORT], [BTN_INSTRUCTIONS], [BTN_HELP]],
+            [
+                [BTN_STATUS, BTN_CREATE, BTN_GET_CONFIG],
+                [BTN_BUY, BTN_REPORT],
+                [BTN_INSTRUCTIONS],
+                [BTN_HELP],
+            ],
         )
 
     def test_admin_keyboard_contains_admin_actions(self):
@@ -56,6 +63,8 @@ class BotUiTest(unittest.TestCase):
         self.assertIn(BTN_INSTRUCTIONS, flat)
         self.assertIn(BTN_BROADCAST, flat)
         self.assertIn(BTN_REPORT, flat)
+        self.assertIn(BTN_BUY, flat)
+        self.assertIn(BTN_REFUNDS, flat)
 
     def test_admin_keyboard_keeps_broadcast_visible_near_top(self):
         top_rows = keyboard_rows(is_admin=True, is_allowed=True)[:3]
@@ -78,6 +87,8 @@ class BotUiTest(unittest.TestCase):
         self.assertEqual(action_for_button(BTN_STATUS), "status")
         self.assertEqual(action_for_button(BTN_CREATE), "create")
         self.assertEqual(action_for_button(BTN_GET_CONFIG), "get_config")
+        self.assertEqual(action_for_button(BTN_BUY), "buy")
+        self.assertEqual(action_for_button(BTN_REFUNDS), "refunds")
         self.assertEqual(action_for_button(BTN_KEYS), "keys")
         self.assertEqual(action_for_button(BTN_USERS), "users")
         self.assertEqual(action_for_button(BTN_HELP), "help")

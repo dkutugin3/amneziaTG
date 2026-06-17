@@ -1,6 +1,6 @@
 import os
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Mapping, Optional, Set
 
@@ -16,6 +16,10 @@ DEFAULT_DOCKER_BINARY = "docker"
 DEFAULT_SUBSCRIPTION_CHECK_INTERVAL_SECONDS = 24 * 60 * 60
 LOCAL_MODE = "local"
 DOCKER_EXEC_MODE = "docker-exec"
+
+DEFAULT_STAR_PRICING = {"7d": 25, "30d": 75, "90d": 200, "365d": 600}
+DEFAULT_SUPPORT_CONTACT = "@your_support_username"
+DEFAULT_TERMS_URL = ""
 
 
 class CreateClientError(RuntimeError):
@@ -35,6 +39,9 @@ class BotConfig:
     docker_binary: str = DEFAULT_DOCKER_BINARY
     db_path: Path = DEFAULT_DB_PATH
     subscription_check_interval_seconds: int = DEFAULT_SUBSCRIPTION_CHECK_INTERVAL_SECONDS
+    star_pricing: Mapping[str, int] = field(default_factory=lambda: dict(DEFAULT_STAR_PRICING))
+    support_contact: str = DEFAULT_SUPPORT_CONTACT
+    terms_url: Optional[str] = DEFAULT_TERMS_URL
 
 
 @dataclass(frozen=True)
@@ -58,6 +65,33 @@ def parse_admin_ids(raw: str) -> Set[int]:
             raise ValueError(f"invalid Telegram user id: {value}") from exc
 
     return ids
+
+
+def parse_star_pricing(raw: str) -> dict[str, int]:
+    if not raw.strip():
+        return dict(DEFAULT_STAR_PRICING)
+
+    result: dict[str, int] = {}
+    for chunk in raw.split(","):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        if "=" not in chunk:
+            raise ValueError(f"invalid star pricing entry: {chunk!r}, expected '7d=25'")
+        key, value = chunk.split("=", 1)
+        key = key.strip().lower()
+        value = value.strip()
+        try:
+            amount = int(value)
+        except ValueError as exc:
+            raise ValueError(f"invalid star amount: {value!r}") from exc
+        if amount <= 0:
+            raise ValueError(f"star amount must be greater than zero: {amount}")
+        result[key] = amount
+
+    if not result:
+        return dict(DEFAULT_STAR_PRICING)
+    return result
 
 
 def client_name_for_user(user_id: int) -> str:
@@ -108,6 +142,10 @@ def load_config_from_mapping(values: Mapping[str, str]) -> BotConfig:
     if subscription_check_interval_seconds <= 0:
         raise RuntimeError("SUBSCRIPTION_CHECK_INTERVAL_SECONDS must be greater than zero")
 
+    star_pricing = parse_star_pricing(values.get("STAR_PRICING", ""))
+    support_contact = values.get("SUPPORT_CONTACT", DEFAULT_SUPPORT_CONTACT).strip() or DEFAULT_SUPPORT_CONTACT
+    terms_url = values.get("TERMS_URL", "").strip() or None
+
     return BotConfig(
         token=token,
         admin_ids=admin_ids,
@@ -120,6 +158,9 @@ def load_config_from_mapping(values: Mapping[str, str]) -> BotConfig:
         docker_binary=docker_binary,
         db_path=db_path,
         subscription_check_interval_seconds=subscription_check_interval_seconds,
+        star_pricing=star_pricing,
+        support_contact=support_contact,
+        terms_url=terms_url,
     )
 
 

@@ -6,10 +6,12 @@ from pathlib import Path
 from bot.bot_core import (
     BotConfig,
     CreateClientError,
+    DEFAULT_STAR_PRICING,
     Provisioner,
     client_name_for_user,
     load_config_from_mapping,
     parse_admin_ids,
+    parse_star_pricing,
 )
 from bot.access_store import AccessStore
 
@@ -215,6 +217,49 @@ class BotCoreTest(unittest.TestCase):
                 Provisioner(config, runner=runner).create_client(42)
 
         self.assertIn("awg binary not found", str(ctx.exception))
+
+    def test_parse_star_pricing_accepts_entries(self):
+        self.assertEqual(
+            parse_star_pricing("7d=25, 30d=75, 90d=200, 365d=600"),
+            {"7d": 25, "30d": 75, "90d": 200, "365d": 600},
+        )
+
+    def test_parse_star_pricing_returns_defaults_when_empty(self):
+        self.assertEqual(parse_star_pricing(""), dict(DEFAULT_STAR_PRICING))
+
+    def test_parse_star_pricing_rejects_non_positive_amount(self):
+        with self.assertRaises(ValueError):
+            parse_star_pricing("7d=0")
+
+    def test_parse_star_pricing_rejects_invalid_amount(self):
+        with self.assertRaises(ValueError):
+            parse_star_pricing("7d=abc")
+
+    def test_parse_star_pricing_rejects_malformed_entry(self):
+        with self.assertRaises(ValueError):
+            parse_star_pricing("7d-25")
+
+    def test_load_config_from_mapping_supports_star_pricing(self):
+        config = load_config_from_mapping({
+            "TELEGRAM_BOT_TOKEN": "token",
+            "TELEGRAM_ADMIN_IDS": "42",
+            "AMNEZIA_PUBLIC_ENDPOINT": "vpn.example.com",
+            "STAR_PRICING": "7d=10,30d=50",
+        })
+
+        self.assertEqual(config.star_pricing, {"7d": 10, "30d": 50})
+
+    def test_load_config_from_mapping_supports_support_and_terms(self):
+        config = load_config_from_mapping({
+            "TELEGRAM_BOT_TOKEN": "token",
+            "TELEGRAM_ADMIN_IDS": "42",
+            "AMNEZIA_PUBLIC_ENDPOINT": "vpn.example.com",
+            "SUPPORT_CONTACT": "@vpn_support",
+            "TERMS_URL": "https://example.com/terms",
+        })
+
+        self.assertEqual(config.support_contact, "@vpn_support")
+        self.assertEqual(config.terms_url, "https://example.com/terms")
 
     def test_get_client_config_runs_regenerate_command_for_existing_client(self):
         calls = []
