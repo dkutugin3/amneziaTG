@@ -88,23 +88,23 @@ class BotUiTest(unittest.TestCase):
 
         self.assertIn("Amnezia VPN", text)
         self.assertIn("vpn://abc", text)
-        self.assertIn("Instructions", text)
+        self.assertIn("Инструкция", text)
 
     def test_amnezia_instruction_text_explains_import_flow(self):
         text = amnezia_instruction_text()
 
-        self.assertIn("Download Amnezia VPN", text)
-        self.assertIn("Import", text)
+        self.assertIn("Скачай Amnezia VPN", text)
+        self.assertIn("Импорт", text)
         self.assertIn("vpn://", text)
 
     def test_broadcast_text_helpers_format_preview_and_message(self):
         preview = broadcast_preview_text("Update tonight", recipient_count=3)
         message = broadcast_message_text("Update tonight")
 
-        self.assertIn("Broadcast preview", preview)
-        self.assertIn("Recipients: 3", preview)
+        self.assertIn("Предпросмотр рассылки", preview)
+        self.assertIn("Получателей: 3", preview)
         self.assertIn("Update tonight", preview)
-        self.assertIn("Amnezia VPN announcement", message)
+        self.assertIn("Объявление Amnezia VPN", message)
         self.assertIn("Update tonight", message)
 
     def test_report_text_helpers_format_confirmation_and_admin_notification(self):
@@ -112,13 +112,13 @@ class BotUiTest(unittest.TestCase):
         admin_text = report_admin_text(
             actor="Alice (@alice, id=42)",
             message="VPN does not connect",
-            access_status="active",
+            access_status="активен",
         )
 
-        self.assertIn("sent to admins", confirmation)
-        self.assertIn("User report", admin_text)
+        self.assertIn("отправлено администраторам", confirmation)
+        self.assertIn("Обращение пользователя", admin_text)
         self.assertIn("Alice", admin_text)
-        self.assertIn("active", admin_text)
+        self.assertIn("активен", admin_text)
         self.assertIn("VPN does not connect", admin_text)
 
     def test_invite_deep_link_uses_bot_username_and_key(self):
@@ -131,13 +131,13 @@ class BotUiTest(unittest.TestCase):
         text = invite_created_text(
             label="alice",
             key="AMZ-TEST-KEY",
-            subscription_text="active until 2026-06-30",
+            subscription_text="активна до 2026-06-30",
             bot_username="amnezia_tg_bot",
         )
 
         self.assertIn("AMZ-TEST-KEY", text)
         self.assertIn("https://t.me/amnezia_tg_bot?start=AMZ-TEST-KEY", text)
-        self.assertIn("active until 2026-06-30", text)
+        self.assertIn("активна до 2026-06-30", text)
 
 
 if __name__ == "__main__":

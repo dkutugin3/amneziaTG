@@ -67,7 +67,7 @@ def _menu_markup(provisioner: Provisioner, user_id: int) -> ReplyKeyboardMarkup:
             is_allowed=provisioner.is_allowed(user_id),
         ),
         resize_keyboard=True,
-        input_field_placeholder="Choose action",
+        input_field_placeholder="Выбери действие",
     )
 
 
@@ -95,14 +95,14 @@ def _format_date(timestamp: int) -> str:
 
 def _format_subscription_status(status: str, expires_at: Optional[int]) -> str:
     if status == "revoked":
-        return "revoked"
+        return "отозван"
     if status == "expired":
         if expires_at is None:
-            return "expired"
-        return f"expired on {_format_date(expires_at)}"
+            return "истёк"
+        return f"истёк {_format_date(expires_at)}"
     if expires_at is None:
-        return "forever"
-    return f"active until {_format_date(expires_at)}"
+        return "бессрочно"
+    return f"активна до {_format_date(expires_at)}"
 
 
 def _duration_help_text() -> str:
@@ -182,7 +182,7 @@ async def _require_access(update: Update, provisioner: Provisioner) -> Optional[
     user_id = _user_id(update)
 
     if user_id is None or not provisioner.is_allowed(user_id):
-        await _reply(update, "Доступ не активирован. Нажми кнопку Activate access.")
+        await _reply(update, "Доступ не активирован. Нажми кнопку «Активировать доступ».")
         return None
 
     return user_id
@@ -200,32 +200,32 @@ async def _require_admin(update: Update, provisioner: Provisioner) -> Optional[i
 
 def user_help_text() -> str:
     return (
-        "Amnezia VPN bot\n\n"
-        "Activate access - активировать invite key\n"
-        "Create config - создать VPN-конфиг\n"
-        "Get config - получить существующий VPN-конфиг\n"
-        "Report issue - сообщить админам о проблеме\n"
-        "Amnezia instructions - инструкция по установке конфига\n"
-        "Status - проверить статус\n"
-        "Help - показать это меню"
+        "Бот Amnezia VPN\n\n"
+        "Активировать доступ — активировать инвайт-ключ\n"
+        "Создать конфиг — создать VPN-конфиг\n"
+        "Получить конфиг — получить существующий VPN-конфиг\n"
+        "Сообщить о проблеме — сообщить админам о проблеме\n"
+        "Инструкция Amnezia — инструкция по установке конфига\n"
+        "Статус — проверить статус\n"
+        "Помощь — показать это меню"
     )
 
 
 def admin_help_text() -> str:
     return (
-        "Amnezia VPN bot admin\n\n"
-        "Create invite - создать invite key со сроком подписки\n"
-        "Invite keys - список ключей\n"
-        "Extend user - продлить подписку пользователя\n"
-        "Revoke key - отозвать ключ\n"
-        "Revoke user - отозвать доступ пользователя\n"
-        "Users - список пользователей\n"
-        "Broadcast - массовая рассылка активным пользователям\n"
-        "Report issue - сообщить админам о проблеме\n"
-        "Create config - создать VPN-конфиг для себя\n"
-        "Get config - получить существующий VPN-конфиг\n"
-        "Amnezia instructions - инструкция по установке конфига\n"
-        "Status - проверить свой статус"
+        "Бот Amnezia VPN — администрирование\n\n"
+        "Создать инвайт — создать инвайт-ключ со сроком подписки\n"
+        "Ключи — список ключей\n"
+        "Продлить подписку — продлить подписку пользователя\n"
+        "Отозвать ключ — отозвать ключ\n"
+        "Отозвать доступ — отозвать доступ пользователя\n"
+        "Пользователи — список пользователей\n"
+        "Рассылка — массовая рассылка активным пользователям\n"
+        "Сообщить о проблеме — сообщить админам о проблеме\n"
+        "Создать конфиг — создать VPN-конфиг для себя\n"
+        "Получить конфиг — получить существующий VPN-конфиг\n"
+        "Инструкция Amnezia — инструкция по установке конфига\n"
+        "Статус — проверить свой статус"
     )
 
 
@@ -246,7 +246,7 @@ def build_handlers(provisioner: Provisioner, access_store: AccessStore):
         else:
             await _reply(
                 update,
-                "Amnezia VPN bot\n\nНажми Activate access и отправь invite key.",
+                "Бот Amnezia VPN\n\nНажми «Активировать доступ» и отправь инвайт-ключ.",
                 _menu_markup(provisioner, user_id),
             )
 
@@ -260,7 +260,7 @@ def build_handlers(provisioner: Provisioner, access_store: AccessStore):
 
         if not context.args:
             context.user_data["pending_action"] = "redeem"
-            await _reply(update, "Отправь invite key одним сообщением.", _cancel_markup())
+            await _reply(update, "Отправь инвайт-ключ одним сообщением.", _cancel_markup())
             return
 
         await _redeem_key(update, context, context.args[0])
@@ -280,7 +280,7 @@ def build_handlers(provisioner: Provisioner, access_store: AccessStore):
             "already_redeemed": "Этот ключ уже активирован для твоего Telegram ID.",
             "already_bound": "Этот ключ уже привязан к другому Telegram ID.",
             "revoked": "Этот ключ отозван.",
-            "expired": "Срок действия этого ключа истек.",
+            "expired": "Срок действия этого ключа истёк.",
             "invalid": "Ключ не найден.",
             "user_already_active": "У тебя уже есть активный доступ.",
         }
@@ -292,7 +292,7 @@ def build_handlers(provisioner: Provisioner, access_store: AccessStore):
         await _notify_admins(
             context,
             provisioner,
-            f"Access key redeem: {result.status}\nuser: {_actor(update)}",
+            f"Активация инвайт-ключа: {result.status}\nпользователь: {_actor(update)}",
         )
 
     async def status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -303,23 +303,23 @@ def build_handlers(provisioner: Provisioner, access_store: AccessStore):
         exists = provisioner.client_exists(user_id)
         client = access_store.get_client(user_id)
         lines = [
-            "access: active",
-            f"client: {client.client_name if client else 'tg_' + str(user_id)}",
-            f"config: {'created' if exists else 'not created'}",
+            "доступ: активен",
+            f"клиент: {client.client_name if client else 'tg_' + str(user_id)}",
+            f"конфиг: {'создан' if exists else 'не создан'}",
         ]
         subscription = access_store.get_subscription(user_id)
         if subscription is None and provisioner.is_admin(user_id):
-            lines.append("subscription: admin")
+            lines.append("подписка: админ")
         elif subscription is not None:
             lines.append(
-                "subscription: "
+                "подписка: "
                 + _format_subscription_status(subscription.status, subscription.expires_at)
             )
         await _reply(update, "\n".join(lines), _menu_markup(provisioner, user_id))
         await _notify_admins(
             context,
             provisioner,
-            f"Status checked\nuser: {_actor(update)}\nconfig: {'created' if exists else 'not created'}",
+            f"Проверка статуса\nпользователь: {_actor(update)}\nконфиг: {'создан' if exists else 'не создан'}",
         )
 
     async def create(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -337,16 +337,16 @@ def build_handlers(provisioner: Provisioner, access_store: AccessStore):
             await _notify_admins(
                 context,
                 provisioner,
-                f"Config creation failed\nuser: {_actor(update)}",
+                f"Ошибка создания конфига\nпользователь: {_actor(update)}",
             )
             return
 
         if result.already_exists:
-            await _reply(update, "VPN-конфиг уже создан.", _menu_markup(provisioner, user_id))
+            await _reply(update, "VPN-конфиг уже создан. Нажми «Получить конфиг».", _menu_markup(provisioner, user_id))
             await _notify_admins(
                 context,
                 provisioner,
-                f"Config creation skipped: already exists\nuser: {_actor(update)}\nclient: {result.client_name}",
+                f"Создание конфига пропущено: уже существует\nпользователь: {_actor(update)}\nклиент: {result.client_name}",
             )
             return
 
@@ -361,7 +361,7 @@ def build_handlers(provisioner: Provisioner, access_store: AccessStore):
         await _notify_admins(
             context,
             provisioner,
-            f"Config created\nuser: {_actor(update)}\nclient: {result.client_name}",
+            f"Конфиг создан\nпользователь: {_actor(update)}\nклиент: {result.client_name}",
         )
 
     async def get_config(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -370,7 +370,7 @@ def build_handlers(provisioner: Provisioner, access_store: AccessStore):
             return
 
         if not provisioner.client_exists(user_id):
-            await _reply(update, "VPN-конфиг ещё не создан. Нажми Create config.", _menu_markup(provisioner, user_id))
+            await _reply(update, "VPN-конфиг ещё не создан. Нажми «Создать конфиг».", _menu_markup(provisioner, user_id))
             return
 
         await _reply(update, "Получаю VPN-конфиг...", _menu_markup(provisioner, user_id))
@@ -383,7 +383,7 @@ def build_handlers(provisioner: Provisioner, access_store: AccessStore):
             await _notify_admins(
                 context,
                 provisioner,
-                f"Config get failed\nuser: {_actor(update)}",
+                f"Ошибка получения конфига\nпользователь: {_actor(update)}",
             )
             return
 
@@ -395,7 +395,7 @@ def build_handlers(provisioner: Provisioner, access_store: AccessStore):
         await _notify_admins(
             context,
             provisioner,
-            f"Config retrieved\nuser: {_actor(update)}",
+            f"Конфиг получен\nпользователь: {_actor(update)}",
         )
 
     async def instructions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -434,11 +434,11 @@ def build_handlers(provisioner: Provisioner, access_store: AccessStore):
             return
 
         if provisioner.is_admin(user_id):
-            access_status = "admin"
+            access_status = "админ"
         elif provisioner.is_allowed(user_id):
-            access_status = "active"
+            access_status = "активен"
         else:
-            access_status = "not active"
+            access_status = "не активен"
 
         await _notify_admins(
             context,
@@ -469,7 +469,7 @@ def build_handlers(provisioner: Provisioner, access_store: AccessStore):
             return
 
         context.user_data["pending_action"] = "key_create_label"
-        await _reply(update, "Отправь имя/label для invite key.", _cancel_markup())
+        await _reply(update, "Отправь имя/метку для инвайт-ключа.", _cancel_markup())
         return
 
     async def _ask_invite_duration(
@@ -514,11 +514,11 @@ def build_handlers(provisioner: Provisioner, access_store: AccessStore):
         await _notify_admins(
             context,
             provisioner,
-            "Invite key created\n"
-            f"admin: {_actor(update)}\n"
-            f"label: {invite.label}\n"
-            f"subscription: {subscription_text}\n"
-            f"key: {invite.key}",
+            "Инвайт-ключ создан\n"
+            f"админ: {_actor(update)}\n"
+            f"метка: {invite.label}\n"
+            f"подписка: {subscription_text}\n"
+            f"ключ: {invite.key}",
         )
 
     async def keys(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -528,17 +528,17 @@ def build_handlers(provisioner: Provisioner, access_store: AccessStore):
 
         invites = access_store.list_invites()
         if not invites:
-            await _reply(update, "No invite keys yet.", _menu_markup(provisioner, admin_id))
+            await _reply(update, "Инвайт-ключей пока нет.", _menu_markup(provisioner, admin_id))
             return
 
         lines = []
         for item in invites[:30]:
-            owner = str(item.tg_id) if item.tg_id else "unused"
+            owner = str(item.tg_id) if item.tg_id else "не использован"
             state = _format_subscription_status(item.status, item.expires_at)
             lines.append(f"{item.label}: {owner}, {state}")
 
         await _reply(update, "\n".join(lines), _menu_markup(provisioner, admin_id))
-        await _notify_admins(context, provisioner, f"Invite keys listed\nadmin: {_actor(update)}")
+        await _notify_admins(context, provisioner, f"Список инвайт-ключей\nадмин: {_actor(update)}")
 
     async def key_revoke(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         admin_id = await _require_admin(update, provisioner)
@@ -547,7 +547,7 @@ def build_handlers(provisioner: Provisioner, access_store: AccessStore):
 
         if not context.args:
             context.user_data["pending_action"] = "key_revoke"
-            await _reply(update, "Отправь invite key, который нужно отозвать.", _cancel_markup())
+            await _reply(update, "Отправь инвайт-ключ, который нужно отозвать.", _cancel_markup())
             return
 
         await _revoke_key(update, context, context.args[0], admin_id)
@@ -560,11 +560,11 @@ def build_handlers(provisioner: Provisioner, access_store: AccessStore):
     ) -> None:
         if access_store.revoke_invite(key):
             await _reply(update, "Ключ отозван.", _menu_markup(provisioner, admin_id))
-            result = "revoked"
+            result = "отозван"
         else:
             await _reply(update, "Ключ не найден.", _menu_markup(provisioner, admin_id))
-            result = "not found"
-        await _notify_admins(context, provisioner, f"Invite key revoke: {result}\nadmin: {_actor(update)}")
+            result = "не найден"
+        await _notify_admins(context, provisioner, f"Отзыв инвайт-ключа: {result}\nадмин: {_actor(update)}")
 
     async def users(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         admin_id = await _require_admin(update, provisioner)
@@ -573,7 +573,7 @@ def build_handlers(provisioner: Provisioner, access_store: AccessStore):
 
         users_list = access_store.list_users()
         if not users_list:
-            await _reply(update, "No activated users yet.", _menu_markup(provisioner, admin_id))
+            await _reply(update, "Активированных пользователей пока нет.", _menu_markup(provisioner, admin_id))
             return
 
         lines = []
@@ -583,7 +583,7 @@ def build_handlers(provisioner: Provisioner, access_store: AccessStore):
             lines.append(f"{item.tg_id}: {item.label}, {state}, {client}")
 
         await _reply(update, "\n".join(lines), _menu_markup(provisioner, admin_id))
-        await _notify_admins(context, provisioner, f"Users listed\nadmin: {_actor(update)}")
+        await _notify_admins(context, provisioner, f"Список пользователей\nадмин: {_actor(update)}")
 
     async def user_revoke(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         admin_id = await _require_admin(update, provisioner)
@@ -592,7 +592,7 @@ def build_handlers(provisioner: Provisioner, access_store: AccessStore):
 
         if not context.args:
             context.user_data["pending_action"] = "user_revoke"
-            await _reply(update, "Отправь Telegram ID пользователя для отзыва.", _cancel_markup())
+            await _reply(update, "Отправь Telegram ID пользователя для отзыва доступа.", _cancel_markup())
             return
 
         await _revoke_user(update, context, context.args[0], admin_id)
@@ -606,19 +606,19 @@ def build_handlers(provisioner: Provisioner, access_store: AccessStore):
         try:
             tg_id = int(raw_tg_id)
         except ValueError:
-            await _reply(update, "tg_id должен быть числом.", _menu_markup(provisioner, admin_id))
+            await _reply(update, "Telegram ID должен быть числом.", _menu_markup(provisioner, admin_id))
             return
 
         if access_store.revoke_user(tg_id):
             await _reply(update, "Доступ пользователя отозван.", _menu_markup(provisioner, admin_id))
-            result = "revoked"
+            result = "отозван"
         else:
             await _reply(update, "Активный пользователь не найден.", _menu_markup(provisioner, admin_id))
-            result = "not found"
+            result = "не найден"
         await _notify_admins(
             context,
             provisioner,
-            f"User revoke: {result}\nadmin: {_actor(update)}\ntarget_tg_id: {raw_tg_id}",
+            f"Отзыв пользователя: {result}\nадмин: {_actor(update)}\ntg_id: {raw_tg_id}",
         )
 
     async def user_extend(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -647,7 +647,7 @@ def build_handlers(provisioner: Provisioner, access_store: AccessStore):
         if len(parts) != 2:
             await _reply(
                 update,
-                "Формат: <telegram_id> <duration>, например 123456789 30d или 123456789 forever.",
+                "Формат: <telegram_id> <срок>, например 123456789 30d или 123456789 forever.",
                 _menu_markup(provisioner, admin_id),
             )
             return
@@ -656,7 +656,7 @@ def build_handlers(provisioner: Provisioner, access_store: AccessStore):
         try:
             tg_id = int(raw_tg_id)
         except ValueError:
-            await _reply(update, "tg_id должен быть числом.", _menu_markup(provisioner, admin_id))
+            await _reply(update, "Telegram ID должен быть числом.", _menu_markup(provisioner, admin_id))
             return
 
         try:
@@ -667,28 +667,28 @@ def build_handlers(provisioner: Provisioner, access_store: AccessStore):
 
         if not updated:
             await _reply(update, "Пользователь не найден или доступ отозван.", _menu_markup(provisioner, admin_id))
-            result = "not found"
-            subscription_text = "unknown"
+            result = "не найден"
+            subscription_text = "неизвестно"
         else:
             subscription = access_store.get_subscription(tg_id)
             subscription_text = (
                 _format_subscription_status(subscription.status, subscription.expires_at)
                 if subscription is not None
-                else "unknown"
+                else "неизвестно"
             )
             await _reply(
                 update,
                 f"Подписка обновлена: {subscription_text}.",
                 _menu_markup(provisioner, admin_id),
             )
-            result = "extended"
+            result = "продлена"
 
         await _notify_admins(
             context,
             provisioner,
-            "User subscription extend: "
-            f"{result}\nadmin: {_actor(update)}\n"
-            f"target_tg_id: {raw_tg_id}\nsubscription: {subscription_text}",
+            "Продление подписки пользователя: "
+            f"{result}\nадмин: {_actor(update)}\n"
+            f"tg_id: {raw_tg_id}\nподписка: {subscription_text}",
         )
 
     async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -751,11 +751,11 @@ def build_handlers(provisioner: Provisioner, access_store: AccessStore):
                 logger.exception("failed to send broadcast to user %s", recipient.tg_id)
 
         summary = (
-            "Broadcast sent\n"
-            f"admin: {_actor(update)}\n"
-            f"recipients: {len(recipients)}\n"
-            f"delivered: {delivered}\n"
-            f"failed: {failed}"
+            "Рассылка отправлена\n"
+            f"админ: {_actor(update)}\n"
+            f"получателей: {len(recipients)}\n"
+            f"доставлено: {delivered}\n"
+            f"ошибок: {failed}"
         )
         await _reply(update, summary, _menu_markup(provisioner, admin_id))
         await _notify_admins(context, provisioner, summary)
@@ -822,7 +822,7 @@ def build_handlers(provisioner: Provisioner, access_store: AccessStore):
                 context.user_data["pending_action"] = "broadcast_confirm"
                 await _reply(
                     update,
-                    "Нажми Send broadcast для отправки или Cancel для отмены.",
+                    "Нажми «Отправить рассылку» для отправки или «Отмена» для отказа.",
                     _broadcast_confirm_markup(),
                 )
             return
@@ -832,7 +832,7 @@ def build_handlers(provisioner: Provisioner, access_store: AccessStore):
 
         if action == "redeem":
             context.user_data["pending_action"] = "redeem"
-            await _reply(update, "Отправь invite key одним сообщением.", _cancel_markup())
+            await _reply(update, "Отправь инвайт-ключ одним сообщением.", _cancel_markup())
             return
         if action == "status":
             await status(update, context)
@@ -856,7 +856,7 @@ def build_handlers(provisioner: Provisioner, access_store: AccessStore):
             admin_id = await _require_admin(update, provisioner)
             if admin_id is not None:
                 context.user_data["pending_action"] = "key_create_label"
-                await _reply(update, "Отправь имя/label для invite key.", _cancel_markup())
+                await _reply(update, "Отправь имя/метку для инвайт-ключа.", _cancel_markup())
             return
         if action == "keys":
             await keys(update, context)
@@ -868,13 +868,13 @@ def build_handlers(provisioner: Provisioner, access_store: AccessStore):
             admin_id = await _require_admin(update, provisioner)
             if admin_id is not None:
                 context.user_data["pending_action"] = "key_revoke"
-                await _reply(update, "Отправь invite key, который нужно отозвать.", _cancel_markup())
+                await _reply(update, "Отправь инвайт-ключ, который нужно отозвать.", _cancel_markup())
             return
         if action == "user_revoke":
             admin_id = await _require_admin(update, provisioner)
             if admin_id is not None:
                 context.user_data["pending_action"] = "user_revoke"
-                await _reply(update, "Отправь Telegram ID пользователя для отзыва.", _cancel_markup())
+                await _reply(update, "Отправь Telegram ID пользователя для отзыва доступа.", _cancel_markup())
             return
         if action == "user_extend":
             admin_id = await _require_admin(update, provisioner)
