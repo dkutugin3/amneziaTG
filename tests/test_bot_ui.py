@@ -5,6 +5,7 @@ from bot.bot_ui import (
     BTN_BROADCAST,
     BTN_CANCEL,
     BTN_CREATE,
+    BTN_GET_CONFIG,
     BTN_HELP,
     BTN_INSTRUCTIONS,
     BTN_KEY_CREATE,
@@ -39,7 +40,7 @@ class BotUiTest(unittest.TestCase):
     def test_allowed_user_keyboard_offers_status_create_instructions_and_help(self):
         self.assertEqual(
             keyboard_rows(is_admin=False, is_allowed=True),
-            [[BTN_STATUS, BTN_CREATE], [BTN_REPORT], [BTN_INSTRUCTIONS], [BTN_HELP]],
+            [[BTN_STATUS, BTN_CREATE, BTN_GET_CONFIG], [BTN_REPORT], [BTN_INSTRUCTIONS], [BTN_HELP]],
         )
 
     def test_admin_keyboard_contains_admin_actions(self):
@@ -76,6 +77,7 @@ class BotUiTest(unittest.TestCase):
     def test_action_for_button_maps_direct_buttons(self):
         self.assertEqual(action_for_button(BTN_STATUS), "status")
         self.assertEqual(action_for_button(BTN_CREATE), "create")
+        self.assertEqual(action_for_button(BTN_GET_CONFIG), "get_config")
         self.assertEqual(action_for_button(BTN_KEYS), "keys")
         self.assertEqual(action_for_button(BTN_USERS), "users")
         self.assertEqual(action_for_button(BTN_HELP), "help")

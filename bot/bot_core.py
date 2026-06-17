@@ -195,12 +195,49 @@ class Provisioner:
             already_exists=False,
         )
 
+    def get_client_config(self, user_id: int) -> str:
+        client_name = client_name_for_user(user_id)
+
+        if not self.client_exists(user_id):
+            raise CreateClientError("client config not found, run /create first")
+
+        command = self._regenerate_client_command(client_name)
+        result = self.runner(command)
+
+        if result.returncode != 0:
+            message = (result.stderr or result.stdout or "regenerate client command failed").strip()
+            raise CreateClientError(message)
+
+        vpn_uri = result.stdout.strip()
+        if not vpn_uri.startswith("vpn://"):
+            raise CreateClientError("regenerate client command did not return a vpn:// URI")
+
+        return vpn_uri
+
     def _create_client_command(self, client_name: str) -> list[str]:
         command = [
             "python3",
             str(self.config.create_client_script),
             client_name,
             self.config.public_endpoint,
+        ]
+
+        if self.config.provision_mode == DOCKER_EXEC_MODE:
+            return [
+                self.config.docker_binary,
+                "exec",
+                self._amnezia_container_name(),
+            ] + command
+
+        return command
+
+    def _regenerate_client_command(self, client_name: str) -> list[str]:
+        command = [
+            "python3",
+            str(self.config.create_client_script),
+            client_name,
+            self.config.public_endpoint,
+            "--regenerate",
         ]
 
         if self.config.provision_mode == DOCKER_EXEC_MODE:

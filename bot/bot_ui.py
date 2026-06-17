@@ -4,6 +4,7 @@ from typing import Optional
 BTN_ACTIVATE = "Activate access"
 BTN_STATUS = "Status"
 BTN_CREATE = "Create config"
+BTN_GET_CONFIG = "Get config"
 BTN_REPORT = "Report issue"
 BTN_INSTRUCTIONS = "Amnezia instructions"
 BTN_HELP = "Help"
@@ -21,7 +22,7 @@ BTN_CANCEL = "Cancel"
 def keyboard_rows(is_admin: bool, is_allowed: bool) -> list[list[str]]:
     if is_admin:
         return [
-            [BTN_STATUS, BTN_CREATE],
+            [BTN_STATUS, BTN_CREATE, BTN_GET_CONFIG],
             [BTN_BROADCAST, BTN_REPORT],
             [BTN_KEY_CREATE, BTN_KEYS],
             [BTN_USERS, BTN_USER_EXTEND],
@@ -31,7 +32,7 @@ def keyboard_rows(is_admin: bool, is_allowed: bool) -> list[list[str]]:
 
     if is_allowed:
         return [
-            [BTN_STATUS, BTN_CREATE],
+            [BTN_STATUS, BTN_CREATE, BTN_GET_CONFIG],
             [BTN_REPORT],
             [BTN_INSTRUCTIONS],
             [BTN_HELP],
@@ -50,6 +51,7 @@ def action_for_button(text: str) -> str:
         BTN_ACTIVATE: "redeem",
         BTN_STATUS: "status",
         BTN_CREATE: "create",
+        BTN_GET_CONFIG: "get_config",
         BTN_REPORT: "report",
         BTN_INSTRUCTIONS: "instructions",
         BTN_HELP: "help",

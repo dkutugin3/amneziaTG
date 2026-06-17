@@ -203,6 +203,7 @@ def user_help_text() -> str:
         "Amnezia VPN bot\n\n"
         "Activate access - активировать invite key\n"
         "Create config - создать VPN-конфиг\n"
+        "Get config - получить существующий VPN-конфиг\n"
         "Report issue - сообщить админам о проблеме\n"
         "Amnezia instructions - инструкция по установке конфига\n"
         "Status - проверить статус\n"
@@ -222,6 +223,7 @@ def admin_help_text() -> str:
         "Broadcast - массовая рассылка активным пользователям\n"
         "Report issue - сообщить админам о проблеме\n"
         "Create config - создать VPN-конфиг для себя\n"
+        "Get config - получить существующий VPN-конфиг\n"
         "Amnezia instructions - инструкция по установке конфига\n"
         "Status - проверить свой статус"
     )
@@ -360,6 +362,40 @@ def build_handlers(provisioner: Provisioner, access_store: AccessStore):
             context,
             provisioner,
             f"Config created\nuser: {_actor(update)}\nclient: {result.client_name}",
+        )
+
+    async def get_config(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        user_id = await _require_access(update, provisioner)
+        if user_id is None:
+            return
+
+        if not provisioner.client_exists(user_id):
+            await _reply(update, "VPN-конфиг ещё не создан. Нажми Create config.", _menu_markup(provisioner, user_id))
+            return
+
+        await _reply(update, "Получаю VPN-конфиг...", _menu_markup(provisioner, user_id))
+
+        try:
+            vpn_uri = await asyncio.to_thread(provisioner.get_client_config, user_id)
+        except Exception:
+            logger.exception("failed to get client config for telegram user %s", user_id)
+            await _reply(update, "Не удалось получить VPN-конфиг. Напиши администратору.")
+            await _notify_admins(
+                context,
+                provisioner,
+                f"Config get failed\nuser: {_actor(update)}",
+            )
+            return
+
+        await _reply(
+            update,
+            amnezia_config_text(vpn_uri),
+            _menu_markup(provisioner, user_id),
+        )
+        await _notify_admins(
+            context,
+            provisioner,
+            f"Config retrieved\nuser: {_actor(update)}",
         )
 
     async def instructions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -804,6 +840,9 @@ def build_handlers(provisioner: Provisioner, access_store: AccessStore):
         if action == "create":
             await create(update, context)
             return
+        if action == "get_config":
+            await get_config(update, context)
+            return
         if action == "instructions":
             await instructions(update, context)
             return
@@ -859,6 +898,7 @@ def build_handlers(provisioner: Provisioner, access_store: AccessStore):
         CommandHandler("redeem", redeem),
         CommandHandler("status", status),
         CommandHandler("create", create),
+        CommandHandler("get_config", get_config),
         CommandHandler("instructions", instructions),
         CommandHandler("report", report),
         CommandHandler("key_create", key_create),

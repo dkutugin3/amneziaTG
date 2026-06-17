@@ -414,6 +414,7 @@ def update_clients_table(
     client_name: str,
     client_public_key: str,
     client_ip: str,
+    preshared_key: str = "",
 ):
     clients = load_clients_table(clients_table_path)
 
@@ -431,6 +432,8 @@ def update_clients_table(
             user_data["clientName"] = client_name
             user_data.setdefault("creationDate", now)
             user_data["allowed_ips"] = f"{client_ip}/32"
+            if preshared_key:
+                user_data["presharedKey"] = preshared_key
 
             item["userData"] = user_data
 
@@ -441,14 +444,18 @@ def update_clients_table(
             )
             return
 
-    clients.append({
+    new_entry = {
         "clientId": client_public_key,
         "userData": {
             "clientName": client_name,
             "creationDate": now,
             "allowed_ips": f"{client_ip}/32",
         },
-    })
+    }
+    if preshared_key:
+        new_entry["userData"]["presharedKey"] = preshared_key
+
+    clients.append(new_entry)
 
     atomic_write_text(
         clients_table_path,
@@ -476,6 +483,87 @@ class FileLock:
             pass
 
 
+def regenerate_vpn_uri(
+    client_name: str,
+    endpoint_host: str,
+    conf_path: Path,
+    clients_table_path: Path,
+    out_dir: Path,
+    dns: str,
+    iface: str,
+) -> str:
+    awg_bin = shutil.which("awg")
+    if not awg_bin:
+        raise RuntimeError("awg binary not found")
+
+    client_conf_path = out_dir / f"{client_name}.conf"
+    if not client_conf_path.exists():
+        raise RuntimeError(f"client config not found: {client_conf_path}")
+
+    client_conf_text = read_file(client_conf_path)
+
+    client_private_key = get_interface_value(client_conf_text, "PrivateKey")
+    if not client_private_key:
+        raise RuntimeError("PrivateKey not found in client config")
+
+    client_ip_raw = get_interface_value(client_conf_text, "Address")
+    client_ip = client_ip_raw.split("/")[0].strip()
+    if not client_ip:
+        raise RuntimeError("Address not found in client config")
+
+    server_conf_text = read_file(conf_path)
+    listen_port = get_interface_value(server_conf_text, "ListenPort")
+    if not listen_port:
+        raise RuntimeError("ListenPort not found in server config")
+
+    server_public_key = run([awg_bin, "show", iface, "public-key"])
+    if not server_public_key:
+        raise RuntimeError(f"empty server public key from interface {iface}")
+
+    client_public_key = run([awg_bin, "pubkey"], input_text=client_private_key + "\n")
+    if not client_public_key:
+        raise RuntimeError("cannot derive client public key")
+
+    preshared_key = ""
+    clients = load_clients_table(clients_table_path)
+    for item in clients:
+        if isinstance(item, dict) and item.get("clientId") == client_public_key:
+            user_data = item.get("userData", {})
+            if isinstance(user_data, dict):
+                preshared_key = user_data.get("presharedKey", "")
+            break
+
+    if not preshared_key:
+        peer_block_match = re.search(
+            rf"# Client: {re.escape(client_name)}\n.*?PresharedKey\s*=\s*(\S+)",
+            server_conf_text,
+            re.DOTALL,
+        )
+        if peer_block_match:
+            preshared_key = peer_block_match.group(1).strip()
+
+    if not preshared_key:
+        raise RuntimeError("PresharedKey not found for client in clientsTable or server config")
+
+    endpoint = endpoint_with_port(endpoint_host, listen_port)
+    obfuscation = get_obfuscation_params(server_conf_text)
+
+    amnezia_json = build_amnezia_json(
+        client_name=client_name,
+        client_conf_text=client_conf_text,
+        client_private_key=client_private_key,
+        client_public_key=client_public_key,
+        client_ip=client_ip,
+        dns=dns,
+        obfuscation=obfuscation,
+        server_public_key=server_public_key,
+        preshared_key=preshared_key,
+        endpoint=endpoint,
+    )
+
+    return encode_vpn_uri(amnezia_json)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Create AmneziaWG2 client, register it in clientsTable, and print vpn:// URI"
@@ -489,6 +577,8 @@ def main():
     parser.add_argument("--clients-table-path", default=DEFAULT_CLIENTS_TABLE_PATH)
     parser.add_argument("--iface", default=DEFAULT_IFACE)
     parser.add_argument("--out-dir", default=DEFAULT_OUT_DIR)
+    parser.add_argument("--regenerate", action="store_true",
+                        help="Re-read existing client conf and print vpn:// URI without creating a new peer")
 
     parser.add_argument("--print-conf-path", action="store_true")
     parser.add_argument("--print-conf", action="store_true")
@@ -502,6 +592,20 @@ def main():
     conf_path = Path(args.conf_path)
     clients_table_path = Path(args.clients_table_path)
     out_dir = Path(args.out_dir)
+
+    if args.regenerate:
+        vpn_uri = regenerate_vpn_uri(
+            client_name=args.client_name,
+            endpoint_host=args.endpoint_host,
+            conf_path=conf_path,
+            clients_table_path=clients_table_path,
+            out_dir=out_dir,
+            dns=args.dns,
+            iface=args.iface,
+        )
+        print(vpn_uri)
+        return
+
     lock_path = Path("/tmp/create-amnezia-client-uri.lock")
 
     awg_bin = shutil.which("awg")
@@ -531,7 +635,7 @@ def main():
             )
 
         if not server_public_key:
-            raise SystemExit(f"ERROR: empty server public key from {args.iface}")
+            raise SystemExit(f"ERROR: empty server public key from interface {args.iface}")
 
         client_conf_path = out_dir / f"{args.client_name}.conf"
 
@@ -625,6 +729,7 @@ def main():
             client_name=args.client_name,
             client_public_key=client_public_key,
             client_ip=client_ip,
+            preshared_key=preshared_key,
         )
 
         amnezia_json = build_amnezia_json(

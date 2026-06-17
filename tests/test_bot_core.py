@@ -216,6 +216,86 @@ class BotCoreTest(unittest.TestCase):
 
         self.assertIn("awg binary not found", str(ctx.exception))
 
+    def test_get_client_config_runs_regenerate_command_for_existing_client(self):
+        calls = []
+
+        def runner(command):
+            calls.append(command)
+            return subprocess.CompletedProcess(command, 0, "vpn://regenerated\n", "")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            clients_dir = Path(tmp)
+            (clients_dir / "tg_42.conf").write_text("[Interface]\n")
+            script_path = Path(tmp) / "create_client.py"
+            config = BotConfig(
+                token="token",
+                admin_ids={42},
+                public_endpoint="vpn.example.com",
+                clients_dir=clients_dir,
+                create_client_script=script_path,
+            )
+
+            vpn_uri = Provisioner(config, runner=runner).get_client_config(42)
+
+        self.assertEqual(vpn_uri, "vpn://regenerated")
+        self.assertEqual(calls, [["python3", str(script_path), "tg_42", "vpn.example.com", "--regenerate"]])
+
+    def test_get_client_config_raises_when_client_does_not_exist(self):
+        def runner(command):
+            raise AssertionError(f"runner should not be called: {command}")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            config = BotConfig(
+                token="token",
+                admin_ids={42},
+                public_endpoint="vpn.example.com",
+                clients_dir=Path(tmp) / "clients",
+                create_client_script=Path(tmp) / "create_client.py",
+            )
+
+            with self.assertRaises(CreateClientError) as ctx:
+                Provisioner(config, runner=runner).get_client_config(42)
+
+        self.assertIn("not found", str(ctx.exception))
+
+    def test_get_client_config_docker_exec_mode_uses_regenerate_flag(self):
+        calls = []
+
+        def runner(command):
+            calls.append(command)
+            if command[3:5] == ["test", "-f"]:
+                return subprocess.CompletedProcess(command, 0, "", "")
+            return subprocess.CompletedProcess(command, 0, "vpn://regenerated\n", "")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            clients_dir = Path(tmp)
+            (clients_dir / "tg_42.conf").write_text("[Interface]\n")
+            config = BotConfig(
+                token="token",
+                admin_ids={42},
+                public_endpoint="vpn.example.com",
+                clients_dir=clients_dir,
+                provision_mode="docker-exec",
+                amnezia_container_name="amnezia",
+            )
+
+            vpn_uri = Provisioner(config, runner=runner).get_client_config(42)
+
+        self.assertEqual(vpn_uri, "vpn://regenerated")
+        self.assertEqual(
+            calls[-1],
+            [
+                "docker",
+                "exec",
+                "amnezia",
+                "python3",
+                "/opt/amnezia/awg/bot/create_client.py",
+                "tg_42",
+                "vpn.example.com",
+                "--regenerate",
+            ],
+        )
+
     @staticmethod
     def fail_runner(command):
         raise AssertionError(f"runner should not be called: {command}")
