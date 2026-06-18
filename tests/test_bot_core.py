@@ -300,6 +300,42 @@ class BotCoreTest(unittest.TestCase):
     def fail_runner(command):
         raise AssertionError(f"runner should not be called: {command}")
 
+    def test_get_traffic_stats_parses_awg_dump(self):
+        import time as _time
+        recent_handshake = int(_time.time()) - 10
+
+        dump_output = (
+            "wPAw+Czq=\tB/DlzZY4=\t47553\t0\n"
+            f"XewS8/Ym=\tvmfKmwi/=\t94.25.169.66:17601\t10.8.1.2/32\t{recent_handshake}\t19179868\t170083414\toff\n"
+            "goX4L/aj=\tCcLMAn3F=\t(none)\t10.8.1.3/32\t0\t0\t0\toff\n"
+        )
+        clients_table = '[{"clientId":"XewS8/Ym=","userData":{"clientName":"tg_7967097851"}}]'
+
+        def runner(command):
+            cmd_str = " ".join(command)
+            if "awg" in cmd_str and "dump" in cmd_str:
+                return subprocess.CompletedProcess(command, 0, dump_output, "")
+            if "cat" in cmd_str and "clientsTable" in cmd_str:
+                return subprocess.CompletedProcess(command, 0, clients_table, "")
+            return subprocess.CompletedProcess(command, 1, "", "")
+
+        config = BotConfig(
+            token="token",
+            admin_ids={42},
+            public_endpoint="vpn.example.com",
+        )
+
+        peers = Provisioner(config, runner=runner).get_traffic_stats()
+
+        self.assertEqual(len(peers), 2)
+        self.assertEqual(peers[0].client_name, "tg_7967097851")
+        self.assertEqual(peers[0].rx_bytes, 19179868)
+        self.assertEqual(peers[0].tx_bytes, 170083414)
+        self.assertTrue(peers[0].online)
+        self.assertEqual(peers[1].client_name, "10.8.1.3/32")
+        self.assertEqual(peers[1].rx_bytes, 0)
+        self.assertFalse(peers[1].online)
+
 
 if __name__ == "__main__":
     unittest.main()

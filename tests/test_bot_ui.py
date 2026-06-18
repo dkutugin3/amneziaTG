@@ -14,11 +14,13 @@ from bot.bot_ui import (
     BTN_REPORT,
     BTN_SEND_BROADCAST,
     BTN_STATUS,
+    BTN_TRAFFIC,
     BTN_USER_EXTEND,
     BTN_USER_REVOKE,
     BTN_USERS,
     action_for_button,
-    amnezia_config_text,
+    amnezia_config_html,
+    amnezia_config_intro,
     amnezia_instruction_text,
     broadcast_message_text,
     broadcast_preview_text,
@@ -56,6 +58,7 @@ class BotUiTest(unittest.TestCase):
         self.assertIn(BTN_INSTRUCTIONS, flat)
         self.assertIn(BTN_BROADCAST, flat)
         self.assertIn(BTN_REPORT, flat)
+        self.assertIn(BTN_TRAFFIC, flat)
 
     def test_admin_keyboard_keeps_broadcast_visible_near_top(self):
         top_rows = keyboard_rows(is_admin=True, is_allowed=True)[:3]
@@ -78,17 +81,18 @@ class BotUiTest(unittest.TestCase):
         self.assertEqual(action_for_button(BTN_STATUS), "status")
         self.assertEqual(action_for_button(BTN_CREATE), "create")
         self.assertEqual(action_for_button(BTN_GET_CONFIG), "get_config")
+        self.assertEqual(action_for_button(BTN_TRAFFIC), "traffic")
         self.assertEqual(action_for_button(BTN_KEYS), "keys")
         self.assertEqual(action_for_button(BTN_USERS), "users")
         self.assertEqual(action_for_button(BTN_HELP), "help")
         self.assertEqual(action_for_button(BTN_BROADCAST), "broadcast")
 
-    def test_amnezia_config_text_identifies_config_and_includes_vpn_uri(self):
-        text = amnezia_config_text("vpn://abc")
+    def test_amnezia_config_intro_and_html(self):
+        intro = amnezia_config_intro()
+        html = amnezia_config_html("vpn://abc")
 
-        self.assertIn("Amnezia VPN", text)
-        self.assertIn("vpn://abc", text)
-        self.assertIn("Инструкция", text)
+        self.assertIn("конфиг", intro.lower())
+        self.assertIn("<code>vpn://abc</code>", html)
 
     def test_amnezia_instruction_text_explains_import_flow(self):
         text = amnezia_instruction_text()

@@ -15,6 +15,7 @@ BTN_USER_EXTEND = "Продлить подписку"
 BTN_USER_REVOKE = "Отозвать доступ"
 BTN_USERS = "Пользователи"
 BTN_BROADCAST = "Рассылка"
+BTN_TRAFFIC = "Трафик"
 BTN_SEND_BROADCAST = "Отправить рассылку"
 BTN_CANCEL = "Отмена"
 
@@ -24,10 +25,11 @@ def keyboard_rows(is_admin: bool, is_allowed: bool) -> list[list[str]]:
         return [
             [BTN_STATUS, BTN_CREATE, BTN_GET_CONFIG],
             [BTN_BROADCAST, BTN_REPORT],
+            [BTN_USERS, BTN_TRAFFIC],
             [BTN_KEY_CREATE, BTN_KEYS],
-            [BTN_USERS, BTN_USER_EXTEND],
-            [BTN_KEY_REVOKE, BTN_USER_REVOKE],
-            [BTN_INSTRUCTIONS, BTN_HELP],
+            [BTN_USER_EXTEND, BTN_USER_REVOKE],
+            [BTN_KEY_REVOKE, BTN_INSTRUCTIONS],
+            [BTN_HELP],
         ]
 
     if is_allowed:
@@ -62,6 +64,7 @@ def action_for_button(text: str) -> str:
         BTN_USER_REVOKE: "user_revoke",
         BTN_USERS: "users",
         BTN_BROADCAST: "broadcast",
+        BTN_TRAFFIC: "traffic",
         BTN_SEND_BROADCAST: "send_broadcast",
         BTN_CANCEL: "cancel",
     }.get(text.strip(), "")
@@ -78,13 +81,17 @@ def amnezia_instruction_text() -> str:
     )
 
 
-def amnezia_config_text(vpn_uri: str) -> str:
+def amnezia_config_intro() -> str:
     return (
-        "Это твоя строка конфигурации Amnezia VPN.\n\n"
-        f"{vpn_uri}\n\n"
-        "Инструкция: открой Amnezia VPN, добавь новое подключение, выбери импорт из строки/буфера обмена, "
-        "вставь эту строку vpn://, затем сохрани и подключайся."
+        "Это твой конфиг Amnezia VPN.\n"
+        "Скопируй строку из следующего сообщения и вставь её в Amnezia VPN "
+        "(Импорт из строки / буфера обмена)."
     )
+
+
+def amnezia_config_html(vpn_uri: str) -> str:
+    safe = vpn_uri.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    return f"<code>{safe}</code>"
 
 
 def broadcast_preview_text(message: str, recipient_count: int) -> str:

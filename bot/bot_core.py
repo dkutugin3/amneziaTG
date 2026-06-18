@@ -1,6 +1,7 @@
+import json
 import os
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Mapping, Optional, Set
 
@@ -45,6 +46,17 @@ class CreateClientResult:
 
 
 Runner = Callable[[list[str]], subprocess.CompletedProcess]
+
+
+@dataclass(frozen=True)
+class PeerTraffic:
+    client_name: str
+    rx_bytes: int
+    tx_bytes: int
+    endpoint: str
+    allowed_ip: str
+    last_handshake: int
+    online: bool
 
 
 def parse_admin_ids(raw: str) -> Set[int]:
@@ -253,3 +265,87 @@ class Provisioner:
         if not self.config.amnezia_container_name:
             raise RuntimeError("amnezia container name is not configured")
         return self.config.amnezia_container_name
+
+    def get_traffic_stats(self) -> list[PeerTraffic]:
+        dump_result = self.runner(self._awg_show_dump_command())
+        if dump_result.returncode != 0:
+            raise CreateClientError(
+                (dump_result.stderr or dump_result.stdout or "awg show dump failed").strip()
+            )
+
+        ct_result = self.runner(self._cat_clients_table_command())
+        clients_map: dict[str, str] = {}
+        if ct_result.returncode == 0 and ct_result.stdout.strip():
+            try:
+                data = json.loads(ct_result.stdout.strip())
+                if isinstance(data, list):
+                    for item in data:
+                        if isinstance(item, dict):
+                            client_id = item.get("clientId", "")
+                            user_data = item.get("userData", {})
+                            if isinstance(user_data, dict):
+                                name = user_data.get("clientName", "")
+                            else:
+                                name = ""
+                            if client_id:
+                                clients_map[client_id] = name or client_id
+                elif isinstance(data, dict):
+                    for client_id, value in data.items():
+                        name = ""
+                        if isinstance(value, dict):
+                            name = value.get("clientName", "")
+                        clients_map[client_id] = name or client_id
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+        import time as _time
+        now = int(_time.time())
+
+        peers: list[PeerTraffic] = []
+        for line in dump_result.stdout.strip().splitlines()[1:]:
+            parts = line.split("\t")
+            if len(parts) < 7:
+                continue
+
+            public_key = parts[0].strip()
+            endpoint = parts[2].strip()
+            allowed_ip = parts[3].strip().split(",")[0].strip()
+            last_handshake = int(parts[4]) if parts[4].strip() and parts[4].strip() != "(none)" else 0
+            rx = int(parts[5]) if parts[5].strip().isdigit() else 0
+            tx = int(parts[6]) if parts[6].strip().isdigit() else 0
+
+            client_name = clients_map.get(public_key, allowed_ip)
+            online = last_handshake > 0 and (now - last_handshake) < 180
+
+            peers.append(PeerTraffic(
+                client_name=client_name,
+                rx_bytes=rx,
+                tx_bytes=tx,
+                endpoint=endpoint if endpoint and endpoint != "(none)" else "—",
+                allowed_ip=allowed_ip,
+                last_handshake=last_handshake,
+                online=online,
+            ))
+
+        peers.sort(key=lambda p: (not p.online, -(p.rx_bytes + p.tx_bytes)))
+        return peers
+
+    def _awg_show_dump_command(self) -> list[str]:
+        command = ["awg", "show", "awg0", "dump"]
+        if self.config.provision_mode == DOCKER_EXEC_MODE:
+            return [
+                self.config.docker_binary,
+                "exec",
+                self._amnezia_container_name(),
+            ] + command
+        return command
+
+    def _cat_clients_table_command(self) -> list[str]:
+        command = ["cat", "/opt/amnezia/awg/clientsTable"]
+        if self.config.provision_mode == DOCKER_EXEC_MODE:
+            return [
+                self.config.docker_binary,
+                "exec",
+                self._amnezia_container_name(),
+            ] + command
+        return command

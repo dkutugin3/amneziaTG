@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Optional
 
 from telegram import ReplyKeyboardMarkup, Update
+from telegram.constants import ParseMode
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
 try:
@@ -14,7 +15,8 @@ try:
         BTN_CANCEL,
         BTN_SEND_BROADCAST,
         action_for_button,
-        amnezia_config_text,
+        amnezia_config_html,
+        amnezia_config_intro,
         amnezia_instruction_text,
         broadcast_message_text,
         broadcast_preview_text,
@@ -30,7 +32,8 @@ except ImportError:
         BTN_CANCEL,
         BTN_SEND_BROADCAST,
         action_for_button,
-        amnezia_config_text,
+        amnezia_config_html,
+        amnezia_config_intro,
         amnezia_instruction_text,
         broadcast_message_text,
         broadcast_preview_text,
@@ -107,6 +110,16 @@ def _format_subscription_status(status: str, expires_at: Optional[int]) -> str:
 
 def _duration_help_text() -> str:
     return "Отправь срок подписки: 7d, 30d, 90d, 365d или forever."
+
+
+def _format_bytes(n: int) -> str:
+    if n < 1024:
+        return f"{n} B"
+    if n < 1024 * 1024:
+        return f"{n / 1024:.1f} KB"
+    if n < 1024 * 1024 * 1024:
+        return f"{n / (1024 * 1024):.1f} MB"
+    return f"{n / (1024 * 1024 * 1024):.2f} GB"
 
 
 async def _notify_admins(
@@ -220,6 +233,7 @@ def admin_help_text() -> str:
         "Отозвать ключ — отозвать ключ\n"
         "Отозвать доступ — отозвать доступ пользователя\n"
         "Пользователи — список пользователей\n"
+        "Трафик — статистика по клиентам\n"
         "Рассылка — массовая рассылка активным пользователям\n"
         "Сообщить о проблеме — сообщить админам о проблеме\n"
         "Создать конфиг — создать VPN-конфиг для себя\n"
@@ -351,10 +365,11 @@ def build_handlers(provisioner: Provisioner, access_store: AccessStore):
             return
 
         if result.vpn_uri:
-            await _reply(
-                update,
-                amnezia_config_text(result.vpn_uri),
-                _menu_markup(provisioner, user_id),
+            await _reply(update, amnezia_config_intro(), _menu_markup(provisioner, user_id))
+            await update.message.reply_text(
+                amnezia_config_html(result.vpn_uri),
+                parse_mode=ParseMode.HTML,
+                reply_markup=_menu_markup(provisioner, user_id),
             )
         else:
             await _reply(update, "VPN-конфиг Amnezia создан.", _menu_markup(provisioner, user_id))
@@ -387,10 +402,11 @@ def build_handlers(provisioner: Provisioner, access_store: AccessStore):
             )
             return
 
-        await _reply(
-            update,
-            amnezia_config_text(vpn_uri),
-            _menu_markup(provisioner, user_id),
+        await _reply(update, amnezia_config_intro(), _menu_markup(provisioner, user_id))
+        await update.message.reply_text(
+            amnezia_config_html(vpn_uri),
+            parse_mode=ParseMode.HTML,
+            reply_markup=_menu_markup(provisioner, user_id),
         )
         await _notify_admins(
             context,
@@ -584,6 +600,43 @@ def build_handlers(provisioner: Provisioner, access_store: AccessStore):
 
         await _reply(update, "\n".join(lines), _menu_markup(provisioner, admin_id))
         await _notify_admins(context, provisioner, f"Список пользователей\nадмин: {_actor(update)}")
+
+    async def traffic(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        admin_id = await _require_admin(update, provisioner)
+        if admin_id is None:
+            return
+
+        await _reply(update, "Собираю статистику...", _menu_markup(provisioner, admin_id))
+
+        try:
+            peers = await asyncio.to_thread(provisioner.get_traffic_stats)
+        except Exception:
+            logger.exception("failed to get traffic stats")
+            await _reply(update, "Не удалось получить статистику трафика.", _menu_markup(provisioner, admin_id))
+            return
+
+        if not peers:
+            await _reply(update, "Нет данных по трафику.", _menu_markup(provisioner, admin_id))
+            return
+
+        user_labels: dict[str, str] = {}
+        for u in access_store.list_users():
+            if u.client_name:
+                user_labels[u.client_name] = u.label
+
+        lines = ["Трафик по клиентам\n"]
+        for peer in peers:
+            label = user_labels.get(peer.client_name, peer.client_name)
+            status_icon = "🟢" if peer.online else "⚪"
+            rx = _format_bytes(peer.rx_bytes)
+            tx = _format_bytes(peer.tx_bytes)
+            lines.append(
+                f"{status_icon} {label}\n"
+                f"   ↓ {rx}  ↑ {tx}\n"
+                f"   IP: {peer.allowed_ip}  Endpoint: {peer.endpoint}"
+            )
+
+        await _reply(update, "\n".join(lines), _menu_markup(provisioner, admin_id))
 
     async def user_revoke(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         admin_id = await _require_admin(update, provisioner)
@@ -864,6 +917,9 @@ def build_handlers(provisioner: Provisioner, access_store: AccessStore):
         if action == "users":
             await users(update, context)
             return
+        if action == "traffic":
+            await traffic(update, context)
+            return
         if action == "key_revoke":
             admin_id = await _require_admin(update, provisioner)
             if admin_id is not None:
@@ -905,6 +961,7 @@ def build_handlers(provisioner: Provisioner, access_store: AccessStore):
         CommandHandler("keys", keys),
         CommandHandler("key_revoke", key_revoke),
         CommandHandler("users", users),
+        CommandHandler("traffic", traffic),
         CommandHandler("user_revoke", user_revoke),
         CommandHandler("user_extend", user_extend),
         CommandHandler("broadcast", broadcast),
